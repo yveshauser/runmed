@@ -25,7 +25,7 @@ data IndexedHeap s = IndexedHeap {
  	} 
 
 read_elem s = readArray (heap s)
-write_elem s i x = writeArray (heap s) i x
+write_elem s = writeArray (heap s)
 read_idx_into_heap s = readArray (idx_into_heap s)
 read_idx_into_window s = readArray (idx_into_window s)
 
