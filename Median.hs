@@ -13,6 +13,10 @@ import IndexedHeap
 
 -- Implementation of a running median smoother according to the
 -- algorithm described in Haerdle und Steiger (1995).
+--
+-- Using implicit parameters language extension (-XImplicitParams)
+-- See also: Functional Pearls: Global Variables in Haskell, John Hughes 2004
+
 runmed :: Int -> [Double] -> [Double]
 runmed k l  
   | length l < 2*k+1 = l
