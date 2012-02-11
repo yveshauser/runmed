@@ -1,5 +1,5 @@
 import Median
-import IndexedHeap 
+import IndexedHeap as I
 
 import Test.QuickCheck
 --import Math.Statistics
@@ -7,7 +7,7 @@ import Test.QuickCheck
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
-import Data.Array.Unboxed
+import Data.Array.Unboxed as U
 import Data.List
 
 build_from_list :: [Double] -> ST s (IndexedHeap s)
@@ -20,10 +20,10 @@ build_from_list l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
 
 hsort :: [Double] -> [Double]
 hsort [] = []
-hsort l = elems $ runSTUArray $ do s <- build_from_list l
-				   let ?heap = s
-                                   heapsort (length l) 
-	                           return $ heap ?heap
+hsort l = U.elems $ runSTUArray $ do s <- build_from_list l
+				     let ?heap = s
+                                     heapsort (length l) 
+	                             return $ I.elems ?heap
 
 prop_sort_model xs = sort xs == hsort xs
 qc1 = quickCheck (prop_sort_model :: [Double] -> Bool)

@@ -20,37 +20,37 @@ import Data.STRef
 
 
 data IndexedHeap s = IndexedHeap {
- 	    heap :: STUArray s Int Double -- FIXME: rename
- 	  , idx_into_heap :: STUArray s Int Int
+ 	    elems :: STUArray s Int Double
+ 	  , idx_into_elems :: STUArray s Int Int
  	  , idx_into_window :: STUArray s Int Int
  	} 
 
 read_elem :: (?heap :: IndexedHeap s) => Int -> ST s Double
-read_elem = readArray (heap ?heap)
+read_elem = readArray (elems ?heap)
 
 write_elem :: (?heap :: IndexedHeap s) => Int -> Double -> ST s ()
-write_elem = writeArray (heap ?heap)
+write_elem = writeArray (elems ?heap)
 
 read_idx_into_heap :: (?heap :: IndexedHeap s) => Int -> ST s Int
-read_idx_into_heap = readArray (idx_into_heap ?heap)
+read_idx_into_heap = readArray (idx_into_elems ?heap)
 
 read_idx_into_window :: (?heap :: IndexedHeap s) => Int -> ST s Int
 read_idx_into_window = readArray (idx_into_window ?heap)
 
 swap :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 swap i j = do -- read values
-              heap_elem_i <- readArray (heap ?heap) i
-              heap_elem_j <- readArray (heap ?heap) j
+              heap_elem_i <- readArray (elems ?heap) i
+              heap_elem_j <- readArray (elems ?heap) j
 	      win_elem_i <- readArray (idx_into_window ?heap) i
 	      win_elem_j <- readArray (idx_into_window ?heap) j
-	      pos_elem_k <- readArray (idx_into_heap ?heap) win_elem_i
-	      pos_elem_l <- readArray (idx_into_heap ?heap) win_elem_j
+	      pos_elem_k <- readArray (idx_into_elems ?heap) win_elem_i
+	      pos_elem_l <- readArray (idx_into_elems ?heap) win_elem_j
 	      -- update heap
-              writeArray (heap ?heap) j heap_elem_i 
-              writeArray (heap ?heap) i heap_elem_j 
+              writeArray (elems ?heap) j heap_elem_i 
+              writeArray (elems ?heap) i heap_elem_j 
 	      -- update position index
-	      writeArray (idx_into_heap ?heap) win_elem_i pos_elem_l
-	      writeArray (idx_into_heap ?heap) win_elem_j pos_elem_k
+	      writeArray (idx_into_elems ?heap) win_elem_i pos_elem_l
+	      writeArray (idx_into_elems ?heap) win_elem_j pos_elem_k
 	      -- update window index
 	      writeArray (idx_into_window ?heap) j win_elem_i
 	      writeArray (idx_into_window ?heap) i win_elem_j
@@ -85,8 +85,8 @@ min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
 min_heapify s = heapify (<) idx_minheap_root heap_size s
 
 heapify :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> Int -> ST s ()
-heapify p o s i = heapify_l (heap ?heap) o s p i >>= 
-                    heapify_r (heap ?heap) o s p i >>= 
+heapify p o s i = heapify_l (elems ?heap) o s p i >>= 
+                    heapify_r (elems ?heap) o s p i >>= 
 		    \largest ->
 	    	       if not (largest == i)
 		       then swap i largest >> heapify p o s largest
@@ -123,8 +123,8 @@ push_to_min_root = push_to_idx idx_minheap_root
 move_up :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
 move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 	           if (o > p) then return i
-	           else do elem_i <- readArray (heap ?heap) i
-		           elem_p <- readArray (heap ?heap) p
+	           else do elem_i <- readArray (elems ?heap) i
+		           elem_p <- readArray (elems ?heap) p
                            if (r elem_p elem_i) 
 		           then swap i p >> move_up r o p
 		           else return i
@@ -136,7 +136,7 @@ move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_min = move_up (>) idx_minheap_root
 
 take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
-take_median = readArray (heap ?heap) idx_median
+take_median = readArray (elems ?heap) idx_median
 
 data Ctx = C { k' :: Int 
              , idx_median' :: Int
