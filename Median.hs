@@ -70,7 +70,7 @@ rebuild_heap i x_i x med
 	                      if max_root > x then swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
 			      else return ()
 	med_out_min_in i = do min_root <- read_elem idx_minheap_root 
-	                      if min_root < x  then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
+	                      if min_root < x then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
 			      else return ()
 	med_out_max_in i = do max_root <- read_elem idx_maxheap_root 
 	                      if max_root > x then swap i idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root 
