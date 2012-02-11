@@ -55,20 +55,20 @@ rebuild_heap i x_i x med
         | x_i == med && x <  med = med_out_max_in i
         | x_i == med && x == med = med_out_med_in i
   where 
-	max_out_max_in j = move_up_max j >>= max_heapify
-  	min_out_min_in j = move_up_min j >>= min_heapify
-	max_out_min_in j = push_to_max_root j >> swap idx_maxheap_root idx_median >> 
+	max_out_max_in i = move_up_max i >>= max_heapify
+  	min_out_min_in i = move_up_min i >>= min_heapify
+	max_out_min_in i = push_to_max_root i >> swap idx_maxheap_root idx_median >> 
 			   do min_root <- read_elem idx_minheap_root 
 	                      if min_root < x then swap idx_median idx_minheap_root >> min_heapify idx_minheap_root
 			      else return ()
-	min_out_max_in j = push_to_min_root j >> swap idx_minheap_root idx_median >> 
+	min_out_max_in i = push_to_min_root i >> swap idx_minheap_root idx_median >> 
 			   do max_root <- read_elem idx_maxheap_root
 	                      if max_root > x then swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
 			      else return ()
-	med_out_min_in j = do min_root <- read_elem idx_minheap_root 
-	                      if min_root < x  then swap j idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
+	med_out_min_in i = do min_root <- read_elem idx_minheap_root 
+	                      if min_root < x  then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
 			      else return ()
-	med_out_max_in j = do max_root <- read_elem idx_maxheap_root 
-	                      if max_root > x then swap j idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root 
+	med_out_max_in i = do max_root <- read_elem idx_maxheap_root 
+	                      if max_root > x then swap i idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root 
 			      else return ()
 	med_out_med_in _ = return ()
