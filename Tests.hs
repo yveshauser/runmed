@@ -54,7 +54,3 @@ median' x | odd n  = head  $ drop (n `div` 2) x'
                   where i = (length x' `div` 2) - 1
                         x' = sort x
                         n  = length x
-
-
---runmed_naive :: Num a => [a] -> [a]
-
