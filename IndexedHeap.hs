@@ -25,7 +25,6 @@ data IndexedHeap s = IndexedHeap {
  	  , idx_into_window :: STUArray s Int Int
  	} 
 
-
 read_elem :: (?heap :: IndexedHeap s) => Int -> ST s Double
 read_elem = readArray (heap ?heap)
 
@@ -71,6 +70,7 @@ parent i = shiftR i 1
 build_max_heap :: (?heap :: IndexedHeap s) => Int -> ST s ()
 build_max_heap size = mapM_ (\i -> heapify (>) maxheap_root size i) $ reverse [1 .. idx]
          where idx = floor (fromIntegral(size)/2) 
+	       maxheap_root = 1
 
 heapsort :: (?heap :: IndexedHeap s) => Int -> ST s ()
 heapsort 1 = return ()
@@ -78,11 +78,11 @@ heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 type Rel = Double -> Double -> Bool
 
-max_heapify :: (?heap :: IndexedHeap s) => Int -> ST s ()
-max_heapify s = heapify (>) maxheap_root heap_size s 
+max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+max_heapify s = heapify (>) idx_maxheap_root heap_size s 
 
-min_heapify :: (?heap :: IndexedHeap s) => Int -> ST s ()
-min_heapify s = heapify (<) minheap_root heap_size s
+min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+min_heapify s = heapify (<) idx_minheap_root heap_size s
 
 heapify :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> Int -> ST s ()
 heapify p o s i = heapify_l (heap ?heap) o s p i >>= 
@@ -114,10 +114,11 @@ push_to_idx r i
 	| otherwise = let j = parent (i-(r-1)) + (r-1) in
 		      swap i j >> push_to_idx r j
 
-push_to_max_root :: (?heap :: IndexedHeap s) => Int -> ST s ()
-push_to_max_root = push_to_idx maxheap_root
-push_to_min_root :: (?heap :: IndexedHeap s) => Int -> ST s ()
-push_to_min_root = push_to_idx minheap_root 
+push_to_max_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_max_root = push_to_idx idx_maxheap_root
+
+push_to_min_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_min_root = push_to_idx idx_minheap_root 
 
 move_up :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
 move_up r o i = do let p = parent (i-(o-1)) + (o-1)
@@ -128,26 +129,51 @@ move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 		           then swap i p >> move_up r o p
 		           else return i
 
-move_up_max :: (?heap :: IndexedHeap s) => Int -> ST s Int
-move_up_max = move_up (<) maxheap_root
-move_up_min :: (?heap :: IndexedHeap s) => Int -> ST s Int
-move_up_min = move_up (>) minheap_root
+move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_max = move_up (<) idx_maxheap_root
 
-take_median :: (?heap :: IndexedHeap s ) => ST s Double
-take_median = readArray (heap ?heap) median
+move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_min = move_up (>) idx_minheap_root
 
-k = 3
-median = k+1;
-maxheap_root = 1
-minheap_root = k+2
-heap_size = k
-window_size = 2*k+1
+take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
+take_median = readArray (heap ?heap) idx_median
 
-init :: Int -> [Double] -> ST s (IndexedHeap s)
+data Ctx = C { k' :: Int 
+             , idx_median' :: Int
+	     , idx_maxheap_root' :: Int
+	     , idx_minheap_root' :: Int
+	     , heap_size' :: Int
+       	     , window_size' :: Int
+            }		
+
+buildCtx :: Int -> Ctx
+buildCtx k = C k (k+1) 1 (k+2) k (2*k+1)
+
+idx_median :: (?ctx :: Ctx) => Int
+idx_median = idx_median' ?ctx
+
+idx_maxheap_root :: (?ctx :: Ctx) => Int
+idx_maxheap_root = idx_maxheap_root' ?ctx
+
+idx_minheap_root :: (?ctx :: Ctx) => Int
+idx_minheap_root = idx_minheap_root' ?ctx
+
+heap_size :: (?ctx :: Ctx) => Int
+heap_size = heap_size' ?ctx
+
+window_size :: (?ctx :: Ctx) => Int
+window_size = window_size' ?ctx
+
+init :: (?ctx :: Ctx) => Int -> [Double] -> ST s (IndexedHeap s)
 init s l = do x <- build s l 
 	      let ?heap = x
               heapsort (2*s+1) 
-	      reverse' maxheap_root s 
+	      reverse' idx_maxheap_root s 
+
+reverse' :: (?heap :: IndexedHeap s) => Int -> Int -> ST s (IndexedHeap s)
+reverse' i j 
+	| i < j = swap i j >> reverse' (i+1) (j-1)
+	| otherwise = return ?heap
 
 build :: Int -> [Double] -> ST s (IndexedHeap s)
 build s l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
@@ -156,10 +182,4 @@ build s l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
 	     idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
 	     idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
 	     up_idx = 2*s+1
-
-
-reverse' :: (?heap :: IndexedHeap s) => Int -> Int -> ST s (IndexedHeap s)
-reverse' i j 
-	| i < j = swap i j >> reverse' (i+1) (j-1)
-	| otherwise = return ?heap
 

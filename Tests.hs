@@ -1,5 +1,5 @@
 import Median
-import IndexedHeap hiding ( median )
+import IndexedHeap 
 
 import Test.QuickCheck
 --import Math.Statistics
@@ -28,18 +28,20 @@ hsort l = elems $ runSTUArray $ do s <- build_from_list l
 prop_sort_model xs = sort xs == hsort xs
 qc1 = quickCheck (prop_sort_model :: [Double] -> Bool)
 
-runmed_naive :: [Double] -> [Double]
-runmed_naive l 
-  | length l < 2*k+1 = l
-  | otherwise = begin_rule l ++ moving_median l ++ end_rule l
 
-moving_median [] = []
-moving_median l@(x:xs) 
+runmed_naive :: Int -> [Double] -> [Double]
+runmed_naive k l 
+  | length l < 2*k+1 = l
+  | otherwise = begin_rule k l ++ moving_median k l ++ end_rule k l
+
+moving_median _ [] = []
+moving_median k l@(x:xs) 
   | length l < 2*k+1 = []
   | otherwise = let window = take (2*k+1) l in 
-                median' window : moving_median xs
+                median' window : moving_median k xs
 
-prop_median_model xs = runmed xs == runmed_naive xs
+k = 3
+prop_median_model xs = runmed k xs == runmed_naive k xs
 qc2 = quickCheck (prop_median_model :: [Double] -> Bool)
 
 -- copied from hstats (cabal install failed...)
