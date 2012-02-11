@@ -33,7 +33,7 @@ runmed' k l = let ?ctx = buildCtx k in runST $
                        ws = 2*k+1
 
 begin_rule :: Int -> [Double] -> [Double]
-begin_rule k l = take k l
+begin_rule = take 
 
 end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l 
