@@ -11,6 +11,8 @@ import Control.Monad.ST
 
 import IndexedHeap 
 
+-- Implementation of a running median smoother according to the
+-- algorithm described in Haerdle und Steiger (1995).
 runmed :: Int -> [Double] -> [Double]
 runmed k l  
   | length l < 2*k+1 = l
