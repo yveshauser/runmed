@@ -39,40 +39,40 @@ end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l 
 
 step :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Double -> Int -> ST s Double
-step x o = do i <- read_idx_into_heap (o+1) 
-              x_i <- read_elem i
-              med <- read_elem idx_median
-              write_elem i x 
-              rebuild_heap i x_i x med
-              take_median 
+step x_in o = do i <- read_idx_into_heap (o+1) 
+                 x_out <- read_elem i
+                 med <- read_elem idx_median
+                 write_elem i x_in 
+                 rebuild_heap i x_out x_in med
+                 take_median 
 
 rebuild_heap :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> Double -> Double -> Double -> ST s ()
-rebuild_heap i x_i x med 
+rebuild_heap i x_out x_in med 
         -- min out 
-        | x_i > med && x >= med = min_out_min_in i
-        | x_i > med && x <  med = min_out_max_in i
+        | x_out > med && x_in >= med = min_out_min_in i
+        | x_out > med && x_in <  med = min_out_max_in i
         -- max out
-        | x_i < med && x <= med = max_out_max_in i
-        | x_i < med && x >  med = max_out_min_in i
+        | x_out < med && x_in <= med = max_out_max_in i
+        | x_out < med && x_in >  med = max_out_min_in i
         -- median out
-        | x_i == med && x >  med = med_out_min_in i
-        | x_i == med && x <  med = med_out_max_in i
-        | x_i == med && x == med = med_out_med_in i
+        | x_out == med && x_in >  med = med_out_min_in i
+        | x_out == med && x_in <  med = med_out_max_in i
+        | x_out == med && x_in == med = med_out_med_in i
   where 
 	max_out_max_in i = move_up_max i >>= max_heapify
   	min_out_min_in i = move_up_min i >>= min_heapify
 	max_out_min_in i = push_to_max_root i >> swap idx_maxheap_root idx_median >> 
 			   do min_root <- read_elem idx_minheap_root 
-	                      if min_root < x then swap idx_median idx_minheap_root >> min_heapify idx_minheap_root
+	                      if min_root < x_in then swap idx_median idx_minheap_root >> min_heapify idx_minheap_root
 			      else return ()
 	min_out_max_in i = push_to_min_root i >> swap idx_minheap_root idx_median >> 
 			   do max_root <- read_elem idx_maxheap_root
-	                      if max_root > x then swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
+	                      if max_root > x_in then swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
 			      else return ()
 	med_out_min_in i = do min_root <- read_elem idx_minheap_root 
-	                      if min_root < x then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
+	                      if min_root < x_in then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root 
 			      else return ()
 	med_out_max_in i = do max_root <- read_elem idx_maxheap_root 
-	                      if max_root > x then swap i idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root 
+	                      if max_root > x_in then swap i idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root 
 			      else return ()
 	med_out_med_in _ = return ()
