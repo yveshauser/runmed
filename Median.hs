@@ -26,11 +26,11 @@ runmed' :: Int -> [Double] -> [Double]
 runmed' k l = let ?ctx = buildCtx k in runST $ 
 	      do h <- init k l 
 	         let ?heap = h 
-                 liftM2 (:) take_median (mapM (\(x,o) -> step x o) l')
+                 liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
 	         where l' = zip xs os
-	               xs = drop ws l
-		       os = map (flip mod $ ws) [0..]
-                       ws = 2*k+1
+	               xs = drop s l
+		       os = map (flip mod $ s) [0..]
+                       s  = 2*k+1
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take 
