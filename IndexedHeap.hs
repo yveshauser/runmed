@@ -69,28 +69,28 @@ heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 type Rel = Double -> Double -> Bool
 
 heapify :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> Int -> ST s ()
-heapify p o s i = heapify_l (elems ?heap) o s p i >>= 
-                    heapify_r (elems ?heap) o s p i >>= 
-		    \largest ->
-	    	       if not (largest == i)
-		       then swap i largest >> heapify p o s largest
-		       else return ()
+heapify p o s i = heapify_l o s p i >>= 
+                  heapify_r o s p i >>= 
+		  \largest ->
+	    	     if not (largest == i)
+		     then swap i largest >> heapify p o s largest
+		     else return ()
 
-heapify_l :: STUArray s Int Double -> Int -> Int -> Rel -> Int -> ST s Int
-heapify_l h o s p i = let l = left (i-(o-1)) + (o-1) in
-		      if l > (s + (o-1)) then return i
-		      else do elem_l <- readArray h l
-		              elem_i <- readArray h i
-		              if p elem_l elem_i then return l
-		      	      else return i
+heapify_l :: (?heap :: IndexedHeap s) => Int -> Int -> Rel -> Int -> ST s Int
+heapify_l o s p i = let l = left (i-(o-1)) + (o-1) in
+		    if l > (s + (o-1)) then return i
+		    else do elem_l <- readArray (elems ?heap) l
+		            elem_i <- readArray (elems ?heap) i
+		            if p elem_l elem_i then return l
+		      	    else return i
 
-heapify_r :: STUArray s Int Double -> Int -> Int -> Rel -> Int -> Int -> ST s Int
-heapify_r h o s p i largest = do let r = right (i-(o-1)) + (o-1) 
-		                 if r > (s + (o-1)) then return largest
-			         else do elem_r <- readArray h r
-		                         elem_largest <- readArray h largest
-		                         if p elem_r elem_largest then return r
-			                 else return largest
+heapify_r :: (?heap :: IndexedHeap s) => Int -> Int -> Rel -> Int -> Int -> ST s Int
+heapify_r o s p i largest = do let r = right (i-(o-1)) + (o-1) 
+		               if r > (s + (o-1)) then return largest
+			       else do elem_r <- readArray (elems ?heap) r
+		                       elem_largest <- readArray (elems ?heap) largest
+		                       if p elem_r elem_largest then return r
+			               else return largest
 
 push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 push_to_idx r i 
