@@ -1,13 +1,4 @@
-module IndexedHeap {-(
-	  IndexedHeap(..)
-	, build
-	, swap
-	, max_heapify
-	, min_heapify
-	, move_up
-	, push_to_idx
-	, heapsort
-	)-}
+module IndexedHeap 
 where
 
 import Prelude hiding ( head )
@@ -17,7 +8,6 @@ import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
 import Data.STRef
-
 
 data IndexedHeap s = IndexedHeap {
  	    elems :: STUArray s Int Double
@@ -78,12 +68,6 @@ heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 type Rel = Double -> Double -> Bool
 
-max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-max_heapify s = heapify (>) idx_maxheap_root heap_size s 
-
-min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-min_heapify s = heapify (<) idx_minheap_root heap_size s
-
 heapify :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> Int -> ST s ()
 heapify p o s i = heapify_l (elems ?heap) o s p i >>= 
                     heapify_r (elems ?heap) o s p i >>= 
@@ -114,12 +98,6 @@ push_to_idx r i
 	| otherwise = let j = parent (i-(r-1)) + (r-1) in
 		      swap i j >> push_to_idx r j
 
-push_to_max_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-push_to_max_root = push_to_idx idx_maxheap_root
-
-push_to_min_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-push_to_min_root = push_to_idx idx_minheap_root 
-
 move_up :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
 move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 	           if (o > p) then return i
@@ -129,14 +107,8 @@ move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 		           then swap i p >> move_up r o p
 		           else return i
 
-move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_max = move_up (<) idx_maxheap_root
-
-move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_min = move_up (>) idx_minheap_root
-
-take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
-take_median = readArray (elems ?heap) idx_median
+-- Also having a context as implicit parameter, in order to statically
+-- get the window size and dependent parameters
 
 data Ctx = C { k' :: Int 
              , idx_median' :: Int
@@ -163,6 +135,29 @@ heap_size = heap_size' ?ctx
 
 window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
+
+max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+max_heapify s = heapify (>) idx_maxheap_root heap_size s 
+
+min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+min_heapify s = heapify (<) idx_minheap_root heap_size s
+
+move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_max = move_up (<) idx_maxheap_root
+
+move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_min = move_up (>) idx_minheap_root
+
+take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
+take_median = readArray (elems ?heap) idx_median
+
+push_to_max_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_max_root = push_to_idx idx_maxheap_root
+
+push_to_min_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_min_root = push_to_idx idx_minheap_root 
+
+-- Construction of the data structure
 
 init :: (?ctx :: Ctx) => Int -> [Double] -> ST s (IndexedHeap s)
 init s l = do x <- build s l 
