@@ -58,9 +58,8 @@ parent :: Int -> Int
 parent i = shiftR i 1
 
 build_max_heap :: (?heap :: IndexedHeap s) => Int -> ST s ()
-build_max_heap size = mapM_ (\i -> heapify (>) maxheap_root size i) $ reverse [1 .. idx]
-         where idx = floor (fromIntegral(size)/2) 
-	       maxheap_root = 1
+build_max_heap s = mapM_ (heapify (>) 1 s) $ reverse [1 .. up_idx]
+         where up_idx = div s 2
 
 heapsort :: (?heap :: IndexedHeap s) => Int -> ST s ()
 heapsort 1 = return ()
@@ -110,16 +109,15 @@ move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 -- Also having a context as implicit parameter, in order to statically
 -- get the window size and dependent parameters
 
-data Ctx = C { k' :: Int 
+data Ctx = C { heap_size' :: Int 
              , idx_median' :: Int
 	     , idx_maxheap_root' :: Int
 	     , idx_minheap_root' :: Int
-	     , heap_size' :: Int
        	     , window_size' :: Int
             }		
 
 buildCtx :: Int -> Ctx
-buildCtx k = C k (k+1) 1 (k+2) k (2*k+1)
+buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
 
 idx_median :: (?ctx :: Ctx) => Int
 idx_median = idx_median' ?ctx
@@ -137,10 +135,10 @@ window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
 
 max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-max_heapify s = heapify (>) idx_maxheap_root heap_size s 
+max_heapify = heapify (>) idx_maxheap_root heap_size
 
 min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-min_heapify s = heapify (<) idx_minheap_root heap_size s
+min_heapify = heapify (<) idx_minheap_root heap_size
 
 move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_max = move_up (<) idx_maxheap_root
@@ -159,22 +157,17 @@ push_to_min_root = push_to_idx idx_minheap_root
 
 -- Construction of the data structure
 
-init :: (?ctx :: Ctx) => Int -> [Double] -> ST s (IndexedHeap s)
-init s l = do x <- build s l 
-	      let ?heap = x
-              heapsort (2*s+1) 
-	      reverse' idx_maxheap_root s 
+init :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => [Double] -> ST s ()
+init l = heapsort window_size >> reverse idx_maxheap_root heap_size
+	where reverse i j 
+		| i < j = swap i j >> reverse (i+1) (j-1)
+		| otherwise = return ()
 
-reverse' :: (?heap :: IndexedHeap s) => Int -> Int -> ST s (IndexedHeap s)
-reverse' i j 
-	| i < j = swap i j >> reverse' (i+1) (j-1)
-	| otherwise = return ?heap
-
-build :: Int -> [Double] -> ST s (IndexedHeap s)
-build s l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
+build :: (?ctx :: Ctx) => [Double] -> ST s (IndexedHeap s)
+build l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
 	  where
              heap = newListArray (1, up_idx) l
 	     idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
 	     idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
-	     up_idx = 2*s+1
+	     up_idx = window_size
 

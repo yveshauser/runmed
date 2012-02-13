@@ -24,8 +24,9 @@ runmed k l
 
 runmed' :: Int -> [Double] -> [Double]
 runmed' k l = let ?ctx = buildCtx k in runST $ 
-	      do h <- init k l 
+	      do h <- build l 
 	         let ?heap = h 
+	         init l 
                  liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
 	         where l' = zip xs os
 	               xs = drop s l
