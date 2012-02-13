@@ -40,7 +40,7 @@ end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l 
 
 step :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Double -> Int -> ST s Double
-step x_in o = do i <- read_idx_into_heap (o+1) 
+step x_in o = do i <- read_idx_into_elems (o+1) 
                  x_out <- read_elem i
                  med <- read_elem idx_median
                  write_elem i x_in 

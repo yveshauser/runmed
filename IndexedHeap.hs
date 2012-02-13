@@ -21,29 +21,35 @@ read_elem = readArray (elems ?heap)
 write_elem :: (?heap :: IndexedHeap s) => Int -> Double -> ST s ()
 write_elem = writeArray (elems ?heap)
 
-read_idx_into_heap :: (?heap :: IndexedHeap s) => Int -> ST s Int
-read_idx_into_heap = readArray (idx_into_elems ?heap)
+read_idx_into_elems :: (?heap :: IndexedHeap s) => Int -> ST s Int
+read_idx_into_elems = readArray (idx_into_elems ?heap)
+
+write_idx_into_elems :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
+write_idx_into_elems = writeArray (idx_into_elems ?heap)
 
 read_idx_into_window :: (?heap :: IndexedHeap s) => Int -> ST s Int
 read_idx_into_window = readArray (idx_into_window ?heap)
 
+write_idx_into_window :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
+write_idx_into_window = writeArray (idx_into_window ?heap)
+
 swap :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 swap i j = do -- read values
-              heap_elem_i <- readArray (elems ?heap) i
-              heap_elem_j <- readArray (elems ?heap) j
-	      win_elem_i <- readArray (idx_into_window ?heap) i
-	      win_elem_j <- readArray (idx_into_window ?heap) j
-	      pos_elem_k <- readArray (idx_into_elems ?heap) win_elem_i
-	      pos_elem_l <- readArray (idx_into_elems ?heap) win_elem_j
+              heap_elem_i <- read_elem i
+              heap_elem_j <- read_elem j
+	      win_elem_i <- read_idx_into_window i
+	      win_elem_j <- read_idx_into_window j
+	      pos_elem_k <- read_idx_into_elems win_elem_i
+	      pos_elem_l <- read_idx_into_elems win_elem_j
 	      -- update heap
-              writeArray (elems ?heap) j heap_elem_i 
-              writeArray (elems ?heap) i heap_elem_j 
+              write_elem j heap_elem_i 
+              write_elem i heap_elem_j 
 	      -- update position index
-	      writeArray (idx_into_elems ?heap) win_elem_i pos_elem_l
-	      writeArray (idx_into_elems ?heap) win_elem_j pos_elem_k
+	      write_idx_into_elems win_elem_i pos_elem_l
+	      write_idx_into_elems win_elem_j pos_elem_k
 	      -- update window index
-	      writeArray (idx_into_window ?heap) j win_elem_i
-	      writeArray (idx_into_window ?heap) i win_elem_j
+	      write_idx_into_window j win_elem_i
+	      write_idx_into_window i win_elem_j
 
 {-# INLINE left #-}
 left :: Int -> Int
@@ -57,39 +63,49 @@ right i = succ $ shiftL i 1
 parent :: Int -> Int
 parent i = shiftR i 1
 
-build_max_heap :: (?heap :: IndexedHeap s) => Int -> ST s ()
-build_max_heap s = mapM_ (heapify (>) 1 s) $ reverse [1 .. up_idx]
+build_max_heap :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+build_max_heap s = mapM_ (heapify Max s) $ reverse [1 .. up_idx]
          where up_idx = div s 2
 
-heapsort :: (?heap :: IndexedHeap s) => Int -> ST s ()
+heapsort :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
 heapsort 1 = return ()
 heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 type Rel = Double -> Double -> Bool
+data Prio = Min | Max
 
-heapify :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> Int -> ST s ()
-heapify p o s i = heapify_l o s p i >>= 
-                  heapify_r o s p i >>= 
-		  \largest ->
-	    	     if not (largest == i)
-		     then swap i largest >> heapify p o s largest
-		     else return ()
+heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
+heapify p s i = do l <- heapify_l p s i 
+                   m <- heapify_r p s i l 
+	  	   if not (m == i)
+		   then swap i m >> heapify p s m
+		   else return ()
 
-heapify_l :: (?heap :: IndexedHeap s) => Int -> Int -> Rel -> Int -> ST s Int
-heapify_l o s p i = let l = left (i-(o-1)) + (o-1) in
+heapify_l :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
+heapify_l Min s i = let l = left (i-(o-1)) + (o-1) in
 		    if l > (s + (o-1)) then return i
-		    else do elem_l <- readArray (elems ?heap) l
-		            elem_i <- readArray (elems ?heap) i
-		            if p elem_l elem_i then return l
-		      	    else return i
+		    else idx_of_p (<) l i 
+		where o = idx_minheap_root
 
-heapify_r :: (?heap :: IndexedHeap s) => Int -> Int -> Rel -> Int -> Int -> ST s Int
-heapify_r o s p i largest = do let r = right (i-(o-1)) + (o-1) 
-		               if r > (s + (o-1)) then return largest
-			       else do elem_r <- readArray (elems ?heap) r
-		                       elem_largest <- readArray (elems ?heap) largest
-		                       if p elem_r elem_largest then return r
-			               else return largest
+heapify_l Max s i = let l = left i in
+	            if l > s then return i
+		    else idx_of_p (>) l i 
+
+heapify_r :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
+heapify_r Min s i m = let r = right (i-(o-1)) + (o-1) in
+		      if r > (s + (o-1)) then return m
+		      else idx_of_p (<) r m
+		where o = idx_minheap_root
+
+heapify_r Max s i largest = let r = right i in
+		            if r > s then return largest
+			    else idx_of_p (>) r largest
+
+idx_of_p :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
+idx_of_p r i j = do elem_i <- read_elem i
+		    elem_j <- read_elem j
+		    if r elem_i elem_j then return i
+		    else return j
 
 push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 push_to_idx r i 
@@ -100,9 +116,9 @@ push_to_idx r i
 move_up :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
 move_up r o i = do let p = parent (i-(o-1)) + (o-1)
 	           if (o > p) then return i
-	           else do elem_i <- readArray (elems ?heap) i
-		           elem_p <- readArray (elems ?heap) p
-                           if (r elem_p elem_i) 
+	           else do elem_i <- read_elem i
+		           elem_p <- read_elem p
+                           if r elem_p elem_i 
 		           then swap i p >> move_up r o p
 		           else return i
 
@@ -135,10 +151,10 @@ window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
 
 max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-max_heapify = heapify (>) idx_maxheap_root heap_size
+max_heapify = heapify Max heap_size
 
 min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
-min_heapify = heapify (<) idx_minheap_root heap_size
+min_heapify = heapify Min heap_size
 
 move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_max = move_up (<) idx_maxheap_root

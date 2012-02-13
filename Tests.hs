@@ -10,6 +10,7 @@ import Data.Array.ST
 import Data.Array.Unboxed as U
 import Data.List
 
+{-
 build_from_list :: [Double] -> ST s (IndexedHeap s)
 build_from_list l = liftM3 IndexedHeap heap idx_into_heap idx_into_window 
 	   where
@@ -27,6 +28,7 @@ hsort l = U.elems $ runSTUArray $ do s <- build_from_list l
 
 prop_sort_model xs = sort xs == hsort xs
 qc1 = quickCheck (prop_sort_model :: [Double] -> Bool)
+-}
 
 
 runmed_naive :: Int -> [Double] -> [Double]
