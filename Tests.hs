@@ -1,5 +1,5 @@
 import Median
-import IndexedHeap as I
+--import IndexedHeap as I
 
 import Test.QuickCheck
 --import Math.Statistics
