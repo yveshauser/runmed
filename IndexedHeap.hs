@@ -3,6 +3,7 @@ where
 
 import Prelude hiding ( head )
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
@@ -71,56 +72,72 @@ heapsort :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
 heapsort 1 = return ()
 heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
-type Rel = Double -> Double -> Bool
 data Prio = Min | Max
+
+transl :: (Int -> Int) -> Int -> Int -> Int
+transl f i o = f (i-(o-1)) + (o-1)
 
 heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
 heapify p s i = do l <- heapify_l p s i 
                    m <- heapify_r p s i l 
-	  	   if not (m == i)
-		   then swap i m >> heapify p s m
-		   else return ()
+	  	   if m == i then return ()
+		   else swap i m >> heapify p s m
 
 heapify_l :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
-heapify_l Min s i = let l = left (i-(o-1)) + (o-1) in
-		    if l > (s + (o-1)) then return i
-		    else idx_of_p (<) l i 
-		where o = idx_minheap_root
+heapify_l Min s i = if l > (s + (o-1)) then return i
+		    else idx_of_pred (<) l i 
+		where l = transl left i o
+		      o = idx_minheap_root
 
 heapify_l Max s i = let l = left i in
 	            if l > s then return i
-		    else idx_of_p (>) l i 
+		    else idx_of_pred (>) l i 
 
 heapify_r :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
-heapify_r Min s i m = let r = right (i-(o-1)) + (o-1) in
-		      if r > (s + (o-1)) then return m
-		      else idx_of_p (<) r m
-		where o = idx_minheap_root
+heapify_r Min s i m = if r > (s + (o-1)) then return m
+		      else idx_of_pred (<) r m
+		where r = transl right i o
+		      o = idx_minheap_root
 
-heapify_r Max s i largest = let r = right i in
-		            if r > s then return largest
-			    else idx_of_p (>) r largest
+heapify_r Max s i m = let r = right i in
+		      if r > s then return m
+		      else idx_of_pred (>) r m
 
-idx_of_p :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
-idx_of_p r i j = do elem_i <- read_elem i
-		    elem_j <- read_elem j
-		    if r elem_i elem_j then return i
-		    else return j
+if_ :: Bool -> a -> a -> a
+if_ True x _  = x
+if_ False _ x = x
+
+ifF :: Monad m => m Bool -> m b -> m b -> m b
+ifF = liftM3 if_
+
+idx_of_pred :: (?heap :: IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
+idx_of_pred r i j = let cond = liftM2 r (read_elem i) (read_elem j) in
+                 ifF cond (return i) (return j)
 
 push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 push_to_idx r i 
 	| i == r = return ()
-	| otherwise = let j = parent (i-(r-1)) + (r-1) in
+	| otherwise = let j = transl parent i r in
 		      swap i j >> push_to_idx r j
 
-move_up :: (?heap :: IndexedHeap s) => Rel -> Int -> Int -> ST s Int
-move_up r o i = do let p = parent (i-(o-1)) + (o-1)
-	           if (o > p) then return i
-	           else do elem_i <- read_elem i
-		           elem_p <- read_elem p
-                           if r elem_p elem_i 
-		           then swap i p >> move_up r o p
-		           else return i
+move_up :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
+move_up Min i = let p = transl parent i o in
+	        if (o > p) then return i
+	        else do elem_i <- read_elem i
+		        elem_p <- read_elem p
+                        if elem_p > elem_i 
+		        then swap i p >> move_up Min p
+		        else return i
+	 where o = idx_minheap_root
+
+move_up Max i = let p = parent i in
+	        if (o > p) then return i
+	        else do elem_i <- read_elem i
+		        elem_p <- read_elem p
+                        if elem_p < elem_i 
+		        then swap i p >> move_up Max p
+		        else return i
+	 where o = idx_maxheap_root
 
 -- Also having a context as implicit parameter, in order to statically
 -- get the window size and dependent parameters
@@ -157,10 +174,10 @@ min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
 min_heapify = heapify Min heap_size
 
 move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_max = move_up (<) idx_maxheap_root
+move_up_max = move_up Max 
 
 move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_min = move_up (>) idx_minheap_root
+move_up_min = move_up Min
 
 take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
 take_median = readArray (elems ?heap) idx_median
