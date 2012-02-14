@@ -149,8 +149,11 @@ heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 data Prio = Min | Max
 
-transl :: (Int -> Int) -> Int -> Int -> Int
-transl f i o = f (i-(o-1)) + (o-1)
+trans :: (Int -> Int) -> Int -> Int -> Int
+trans f i o = trans_r o $ trans_l f i o
+
+trans_l f i o = f $ i - (pred o)
+trans_r o = (+ (pred o))
 
 heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
 heapify p s i = do l <- heapify_l p s i 
@@ -159,9 +162,9 @@ heapify p s i = do l <- heapify_l p s i
 		   else swap i m >> heapify p s m
 
 heapify_l :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
-heapify_l Min s i = if l > (s + (o-1)) then return i
+heapify_l Min s i = if l > trans_r o s then return i
 		    else idx_of_pred (<) l i 
-		where l = transl left i o
+		where l = trans left i o
 		      o = idx_minheap_root
 
 heapify_l Max s i = let l = left i in
@@ -169,9 +172,9 @@ heapify_l Max s i = let l = left i in
 		    else idx_of_pred (>) l i 
 
 heapify_r :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
-heapify_r Min s i m = if r > (s + (o-1)) then return m
+heapify_r Min s i m = if r > trans_r o s then return m
 		      else idx_of_pred (<) r m
-		where r = transl right i o
+		where r = trans right i o
 		      o = idx_minheap_root
 
 heapify_r Max s i m = let r = right i in
@@ -187,16 +190,16 @@ ifF = liftM3 if_
 
 idx_of_pred :: (?heap :: IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
 idx_of_pred r i j = let cond = liftM2 r (read_elem i) (read_elem j) in
-                 ifF cond (return i) (return j)
+                    ifF cond (return i) (return j)
 
 push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 push_to_idx r i 
 	| i == r = return ()
-	| otherwise = let j = transl parent i r in
+	| otherwise = let j = trans parent i r in
 		      swap i j >> push_to_idx r j
 
 move_up :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
-move_up Min i = let p = transl parent i o in
+move_up Min i = let p = trans parent i o in
 	        if (o > p) then return i
 	        else do elem_i <- read_elem i
 		        elem_p <- read_elem p
@@ -268,7 +271,7 @@ push_to_min_root = push_to_idx idx_minheap_root
 init :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => [Double] -> ST s ()
 init l = heapsort window_size >> reverse idx_maxheap_root heap_size
 	where reverse i j 
-		| i < j = swap i j >> reverse (i+1) (j-1)
+		| i < j = swap i j >> reverse (succ i) (pred j)
 		| otherwise = return ()
 
 build :: (?ctx :: Ctx) => [Double] -> ST s (IndexedHeap s)
