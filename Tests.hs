@@ -1,4 +1,4 @@
-import Median
+import RunningMedian
 --import IndexedHeap as I
 
 import Test.QuickCheck
