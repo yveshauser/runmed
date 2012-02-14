@@ -1,3 +1,5 @@
+{-# LANGUAGE ImplicitParams #-}
+
 module RunningMedian (
 	  runmed
         , begin_rule
@@ -6,19 +8,18 @@ module RunningMedian (
 where
 
 import Prelude hiding ( init, head )
-
 import Control.Applicative
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
-import Data.STRef
 
 -- Implementation of a running median smoother according to the
 -- algorithm described in Haerdle und Steiger (1995).
 --
 -- Using implicit parameters language extension (-XImplicitParams)
 -- See also: Functional Pearls: Global Variables in Haskell, John Hughes 2004
+
 
 runmed :: Int -> [Double] -> [Double]
 runmed k l  
