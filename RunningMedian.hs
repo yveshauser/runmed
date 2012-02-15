@@ -27,7 +27,7 @@ runmed k l = let ?ctx = buildCtx k in runmed' l
 runmed' :: (?ctx :: Ctx) => [Double] -> [Double]
 runmed' l  
   | length l < window_size = l
-  | otherwise = let k = heap_size in begin_rule heap_size l ++ runmed'' l ++ end_rule k l
+  | otherwise = let k = heap_size in begin_rule k l ++ runmed'' l ++ end_rule k l
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
 runmed'' l = let s  = window_size 
