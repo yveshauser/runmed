@@ -27,15 +27,15 @@ runmed k l
   | otherwise = begin_rule k l ++ runmed' k l ++ end_rule k l
 
 runmed' :: Int -> [Double] -> [Double]
-runmed' k l = let ?ctx = buildCtx k in runST $ 
-	      do h <- build l 
-	         let ?heap = h 
-	         init l 
-                 liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
-	         where l' = zip xs os
-	               xs = drop s l
-		       os = map (flip mod $ s) [0..]
-                       s  = 2*k+1
+runmed' k l = let ?ctx = buildCtx k in 
+              let s  = window_size 
+	          l' = zip xs os
+	          xs = drop s l
+		  os = map (flip mod $ s) [0..] in 
+               runST $ do h <- build l 
+	                  let ?heap = h 
+	                  init l 
+                          liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take 
