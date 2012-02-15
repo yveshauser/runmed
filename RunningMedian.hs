@@ -22,20 +22,22 @@ import Data.Bits
 
 
 runmed :: Int -> [Double] -> [Double]
-runmed k l  
-  | length l < 2*k+1 = l
-  | otherwise = begin_rule k l ++ runmed' k l ++ end_rule k l
+runmed k l = let ?ctx = buildCtx k in runmed' l
 
-runmed' :: Int -> [Double] -> [Double]
-runmed' k l = let ?ctx = buildCtx k in 
-              let s  = window_size 
-	          l' = zip xs os
-	          xs = drop s l
-		  os = map (flip mod $ s) [0..] in 
-               runST $ do h <- build l 
-	                  let ?heap = h 
-	                  init l 
-                          liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
+runmed' :: (?ctx :: Ctx) => [Double] -> [Double]
+runmed' l  
+  | length l < window_size = l
+  | otherwise = let k = heap_size in begin_rule heap_size l ++ runmed'' l ++ end_rule k l
+
+runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
+runmed'' l = let s  = window_size 
+	         l' = zip xs os
+	         xs = drop s l
+	  	 os = map (flip mod $ s) [0..] in 
+              runST $ do h <- build l 
+	                 let ?heap = h 
+	                 init l 
+                         liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take 
