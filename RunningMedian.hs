@@ -157,23 +157,23 @@ heapify p s i = do l <- heapify_l p s i
 
 heapify_l :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
 heapify_l Min s i = if l > s then return i
-		    else idx_of_pred (<) (l+o) i 
+		    else idx_of (<) (l+o) i 
 		where l = left (i-o) 
 		      o = idx_minheap_root-1
 
 heapify_l Max s i = let l = left i in
 	            if l > s then return i
-		    else idx_of_pred (>) l i 
+		    else idx_of (>) l i 
 
 heapify_r :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
 heapify_r Min s i m = if r > s then return m
-		      else idx_of_pred (<) (r+o) m
+		      else idx_of (<) (r+o) m
 		where r = right (i-o)
 		      o = idx_minheap_root-1
 
 heapify_r Max s i m = let r = right i in
 		      if r > s then return m
-		      else idx_of_pred (>) r m
+		      else idx_of (>) r m
 
 if_ :: Bool -> a -> a -> a
 if_ True x _  = x
@@ -182,13 +182,14 @@ if_ False _ x = x
 ifF :: Monad m => m Bool -> m b -> m b -> m b
 ifF = liftM3 if_
 
-idx_of_pred :: (?heap :: IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
-idx_of_pred r i j = let cond = liftM2 r (read_elem i) (read_elem j) in
-                        ifF cond (return i) (return j)
+idx_of :: (?heap :: IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
+idx_of r i j = let cond = cmp r i j in ifF cond (return i) (return j)
+
+cmp :: (?heap ::  IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
+cmp r i j = liftM2 r (read_elem i) (read_elem j) 
 
 parent_with_offset :: Int -> Int -> Int
-parent_with_offset i o = parent (i-s) + s
-	where s = o-1
+parent_with_offset i o = let s = o-1 in parent (i-s) + s
 
 push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 push_to_idx r i 
@@ -199,19 +200,15 @@ push_to_idx r i
 move_up :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
 move_up Min i = let p = parent_with_offset i o in
 	        if (o > p) then return i
-	        else do elem_i <- read_elem i
-		        elem_p <- read_elem p
-                        if elem_p > elem_i 
-		        then swap i p >> move_up Min p
+	        else do cond <- cmp (<) i p 
+                        if cond then swap i p >> move_up Min p
 		        else return i
 	 where o = idx_minheap_root
 
 move_up Max i = let p = parent i in
 	        if (o > p) then return i
-	        else do elem_i <- read_elem i
-		        elem_p <- read_elem p
-                        if elem_p < elem_i 
-		        then swap i p >> move_up Max p
+	        else do cond <- cmp (>) i p 
+                        if cond then swap i p >> move_up Max p
 		        else return i
 	 where o = idx_maxheap_root
 
