@@ -1,5 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 
+-- | Implementation of a running median smoother according to the
+--   algorithm described in Haerdle und Steiger (1995).
 module RunningMedian (
 	  runmed
         , begin_rule
@@ -14,20 +16,22 @@ import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
 
--- Implementation of a running median smoother according to the
--- algorithm described in Haerdle und Steiger (1995).
+
+-- Note: Using implicit parameters language extension as motivated in
+--       Functional Pearls: Global Variables in Haskell, John Hughes 2004
+
+-- | Running median filter, i.e., @y_i = median (x_i-k, ..., x_i+k)@, for @k < i < l-k@, where @l = length xs@. The first and the last @k@ elements are given by the 'begin_rule' and 'end_rule'
 --
--- Using implicit parameters language extension (-XImplicitParams)
--- See also: Functional Pearls: Global Variables in Haskell, John Hughes 2004
-
-
-runmed :: Int -> [Double] -> [Double]
-runmed k l = let ?ctx = buildCtx k in runmed' l
+--   The Implementation is running in ... time.
+runmed :: Int       -- ^ The size @k@, where @2*k+1@ is the window size
+       -> [Double]  -- ^ The input list @xs@
+       -> [Double]  -- ^ The output list @ys@
+runmed k xs = let ?ctx = buildCtx k in runmed' xs
 
 runmed' :: (?ctx :: Ctx) => [Double] -> [Double]
-runmed' l  
-  | length l < window_size = l
-  | otherwise = let k = heap_size in begin_rule k l ++ runmed'' l ++ end_rule k l
+runmed' xs 
+  | length xs < window_size = xs
+  | otherwise = let k = heap_size in begin_rule k xs ++ runmed'' xs ++ end_rule k xs
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
 runmed'' l = let s  = window_size 
@@ -111,6 +115,7 @@ read_idx_into_window = readArray (idx_into_window ?heap)
 write_idx_into_window :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 write_idx_into_window = writeArray (idx_into_window ?heap)
 
+-- | swap two elements
 swap :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
 swap i j = do -- read values
               heap_elem_i <- read_elem i
