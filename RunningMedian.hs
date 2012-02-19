@@ -147,8 +147,7 @@ parent :: Int -> Int
 parent i = shiftR i 1
 
 build_max_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
-build_max_heap s = mapM_ (heapify Max s) $ reverse [1 .. up_idx]
-         where up_idx = div s 2
+build_max_heap s = let up_idx = div s 2 in mapM_ (heapify Max s) $ reverse [1 .. up_idx]
 
 heapsort :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 heapsort 1 = return ()
