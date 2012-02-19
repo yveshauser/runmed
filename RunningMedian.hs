@@ -217,12 +217,12 @@ move_up Max i = let p = parent i in
 -- Also having a context as implicit parameter, in order to statically
 -- get the window size and dependent parameters
 
-data Ctx = C { heap_size' :: Int 
-             , idx_median' :: Int
-	     , idx_maxheap_root' :: Int
-	     , idx_minheap_root' :: Int
-       	     , window_size' :: Int
-            }		
+data Ctx = C { heap_size' :: {-# UNPACK #-} !Int
+             , idx_median' :: {-# UNPACK #-} !Int
+             , idx_maxheap_root' :: {-# UNPACK #-} !Int
+             , idx_minheap_root' :: {-# UNPACK #-} !Int
+             , window_size' :: {-# UNPACK #-} !Int
+            }
 
 buildCtx :: Int -> Ctx
 buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
