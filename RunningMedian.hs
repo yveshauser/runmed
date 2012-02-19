@@ -88,7 +88,6 @@ rebuild_heap i x_out x_in med
                               else return ()
         med_out_med_in _ = return ()
 
-
 -- Data structure
 
 data Indexed s = Indexed {
@@ -133,6 +132,55 @@ swap i j = do -- read values
               -- update window index
               write_idx_into_window j win_elem_i
               write_idx_into_window i win_elem_j
+
+-- Having a context as implicit parameter, in order to statically
+-- get the window size and dependent parameters
+
+data Ctx = C { heap_size' :: {-# UNPACK #-} !Int
+             , idx_median' :: {-# UNPACK #-} !Int
+             , idx_maxheap_root' :: {-# UNPACK #-} !Int
+             , idx_minheap_root' :: {-# UNPACK #-} !Int
+             , window_size' :: {-# UNPACK #-} !Int
+            }
+
+buildCtx :: Int -> Ctx
+buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
+
+idx_median :: (?ctx :: Ctx) => Int
+idx_median = idx_median' ?ctx
+
+idx_maxheap_root :: (?ctx :: Ctx) => Int
+idx_maxheap_root = idx_maxheap_root' ?ctx
+
+idx_minheap_root :: (?ctx :: Ctx) => Int
+idx_minheap_root = idx_minheap_root' ?ctx
+
+heap_size :: (?ctx :: Ctx) => Int
+heap_size = heap_size' ?ctx
+
+window_size :: (?ctx :: Ctx) => Int
+window_size = window_size' ?ctx
+
+take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s Double
+take_median = readArray (elems ?ind) idx_median
+
+-- Construction of the data structure
+
+init :: (?ind :: Indexed s, ?ctx :: Ctx) => [Double] -> ST s ()
+init l = heapsort window_size >> reverse idx_maxheap_root heap_size
+        where reverse i j
+                | i < j = swap i j >> reverse (succ i) (pred j)
+                | otherwise = return ()
+
+build :: (?ctx :: Ctx) => [Double] -> ST s (Indexed s)
+build l = liftM3 Indexed heap idx_into_heap idx_into_window
+          where
+             heap = newListArray (1, up_idx) l
+             idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
+             idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
+             up_idx = window_size
+
+-- Heap operations
 
 {-# INLINE left #-}
 left :: Int -> Int
@@ -229,50 +277,3 @@ move_up Max i = let p = parent i in
                         if cond then swap i p >> move_up Max p
                         else return i
          where o = idx_maxheap_root
-
--- Also having a context as implicit parameter, in order to statically
--- get the window size and dependent parameters
-
-data Ctx = C { heap_size' :: {-# UNPACK #-} !Int
-             , idx_median' :: {-# UNPACK #-} !Int
-             , idx_maxheap_root' :: {-# UNPACK #-} !Int
-             , idx_minheap_root' :: {-# UNPACK #-} !Int
-             , window_size' :: {-# UNPACK #-} !Int
-            }
-
-buildCtx :: Int -> Ctx
-buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
-
-idx_median :: (?ctx :: Ctx) => Int
-idx_median = idx_median' ?ctx
-
-idx_maxheap_root :: (?ctx :: Ctx) => Int
-idx_maxheap_root = idx_maxheap_root' ?ctx
-
-idx_minheap_root :: (?ctx :: Ctx) => Int
-idx_minheap_root = idx_minheap_root' ?ctx
-
-heap_size :: (?ctx :: Ctx) => Int
-heap_size = heap_size' ?ctx
-
-window_size :: (?ctx :: Ctx) => Int
-window_size = window_size' ?ctx
-
-take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s Double
-take_median = readArray (elems ?ind) idx_median
-
--- Construction of the data structure
-
-init :: (?ind :: Indexed s, ?ctx :: Ctx) => [Double] -> ST s ()
-init l = heapsort window_size >> reverse idx_maxheap_root heap_size
-        where reverse i j
-                | i < j = swap i j >> reverse (succ i) (pred j)
-                | otherwise = return ()
-
-build :: (?ctx :: Ctx) => [Double] -> ST s (Indexed s)
-build l = liftM3 Indexed heap idx_into_heap idx_into_window
-          where
-             heap = newListArray (1, up_idx) l
-             idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
-             idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
-             up_idx = window_size
