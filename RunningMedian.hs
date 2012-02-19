@@ -1,5 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 
+-- | Implementation of a running median smoother according to the
+--   algorithm described in Haerdle und Steiger (1995).
 module RunningMedian (
 	  runmed
         , begin_rule
@@ -14,20 +16,22 @@ import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
 
--- Implementation of a running median smoother according to the
--- algorithm described in Haerdle und Steiger (1995).
+
+-- Note: Using implicit parameters language extension as motivated in
+--       Functional Pearls: Global Variables in Haskell, John Hughes 2004
+
+-- | Running median filter, i.e., @y_i = median (x_i-k, ..., x_i+k)@, for @k < i < l-k@, where @l = length xs@. The first and the last @k@ elements are given by the 'begin_rule' and 'end_rule'
 --
--- Using implicit parameters language extension (-XImplicitParams)
--- See also: Functional Pearls: Global Variables in Haskell, John Hughes 2004
-
-
-runmed :: Int -> [Double] -> [Double]
-runmed k l = let ?ctx = buildCtx k in runmed' l
+--   The Implementation is running in ... time.
+runmed :: Int       -- ^ The size @k@, where @2*k+1@ is the window size
+       -> [Double]  -- ^ The input list @xs@
+       -> [Double]  -- ^ The output list @ys@
+runmed k xs = let ?ctx = buildCtx k in runmed' xs
 
 runmed' :: (?ctx :: Ctx) => [Double] -> [Double]
-runmed' l  
-  | length l < window_size = l
-  | otherwise = let k = heap_size in begin_rule k l ++ runmed'' l ++ end_rule k l
+runmed' xs 
+  | length xs < window_size = xs
+  | otherwise = let k = heap_size in begin_rule k xs ++ runmed'' xs ++ end_rule k xs
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
 runmed'' l = let s  = window_size 
@@ -35,7 +39,7 @@ runmed'' l = let s  = window_size
 	         xs = drop s l
 	  	 os = map (flip mod $ s) [0..] in 
               runST $ do h <- build l 
-	                 let ?heap = h 
+	                 let ?ind = h 
 	                 init l 
                          liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
 
@@ -45,7 +49,7 @@ begin_rule = take
 end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l 
 
-step :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Double -> Int -> ST s Double
+step :: (?ind :: Indexed s, ?ctx :: Ctx) => Double -> Int -> ST s Double
 step x_in o = do i <- read_idx_into_elems (o+1) 
                  x_out <- read_elem i
                  med <- read_elem idx_median
@@ -53,7 +57,7 @@ step x_in o = do i <- read_idx_into_elems (o+1)
                  rebuild_heap i x_out x_in med
                  take_median 
 
-rebuild_heap :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> Double -> Double -> Double -> ST s ()
+rebuild_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> Double -> Double -> ST s ()
 rebuild_heap i x_out x_in med 
         -- min out 
         | x_out > med && x_in >= med = min_out_min_in i
@@ -87,31 +91,32 @@ rebuild_heap i x_out x_in med
 
 -- Data structure
 
-data IndexedHeap s = IndexedHeap {
+data Indexed s = Indexed {
  	    elems :: STUArray s Int Double
  	  , idx_into_elems :: STUArray s Int Int
  	  , idx_into_window :: STUArray s Int Int
  	} 
 
-read_elem :: (?heap :: IndexedHeap s) => Int -> ST s Double
-read_elem = readArray (elems ?heap)
+read_elem :: (?ind :: Indexed s) => Int -> ST s Double
+read_elem = readArray (elems ?ind)
 
-write_elem :: (?heap :: IndexedHeap s) => Int -> Double -> ST s ()
-write_elem = writeArray (elems ?heap)
+write_elem :: (?ind :: Indexed s) => Int -> Double -> ST s ()
+write_elem = writeArray (elems ?ind)
 
-read_idx_into_elems :: (?heap :: IndexedHeap s) => Int -> ST s Int
-read_idx_into_elems = readArray (idx_into_elems ?heap)
+read_idx_into_elems :: (?ind :: Indexed s) => Int -> ST s Int
+read_idx_into_elems = readArray (idx_into_elems ?ind)
 
-write_idx_into_elems :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
-write_idx_into_elems = writeArray (idx_into_elems ?heap)
+write_idx_into_elems :: (?ind :: Indexed s) => Int -> Int -> ST s ()
+write_idx_into_elems = writeArray (idx_into_elems ?ind)
 
-read_idx_into_window :: (?heap :: IndexedHeap s) => Int -> ST s Int
-read_idx_into_window = readArray (idx_into_window ?heap)
+read_idx_into_window :: (?ind :: Indexed s) => Int -> ST s Int
+read_idx_into_window = readArray (idx_into_window ?ind)
 
-write_idx_into_window :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
-write_idx_into_window = writeArray (idx_into_window ?heap)
+write_idx_into_window :: (?ind :: Indexed s) => Int -> Int -> ST s ()
+write_idx_into_window = writeArray (idx_into_window ?ind)
 
-swap :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
+-- | swap two elements
+swap :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 swap i j = do -- read values
               heap_elem_i <- read_elem i
               heap_elem_j <- read_elem j
@@ -141,23 +146,23 @@ right i = succ $ shiftL i 1
 parent :: Int -> Int
 parent i = shiftR i 1
 
-build_max_heap :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+build_max_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 build_max_heap s = mapM_ (heapify Max s) $ reverse [1 .. up_idx]
          where up_idx = div s 2
 
-heapsort :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+heapsort :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 heapsort 1 = return ()
 heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 data Prio = Min | Max
 
-heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
+heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
 heapify p s i = do l <- heapify_l p s i 
                    m <- heapify_r p s i l 
 	  	   if m == i then return ()
 		   else swap i m >> heapify p s m
 
-heapify_l :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
+heapify_l :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s Int
 heapify_l Min s i = if l > s then return i
 		    else idx_of (<) (l+o) i 
 		where l = left (i-o) 
@@ -167,7 +172,7 @@ heapify_l Max s i = let l = left i in
 	            if l > s then return i
 		    else idx_of (>) l i 
 
-heapify_r :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
+heapify_r :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> ST s Int
 heapify_r Min s i m = if r > s then return m
 		      else idx_of (<) (r+o) m
 		where r = right (i-o)
@@ -184,22 +189,22 @@ if_ False _ x = x
 ifF :: Monad m => m Bool -> m b -> m b -> m b
 ifF = liftM3 if_
 
-idx_of :: (?heap :: IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
+idx_of :: (?ind :: Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
 idx_of r i j = let cond = cmp r i j in ifF cond (return i) (return j)
 
-cmp :: (?heap ::  IndexedHeap s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
+cmp :: (?ind ::  Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
 cmp r i j = liftM2 r (read_elem i) (read_elem j) 
 
 parent_with_offset :: Int -> Int -> Int
 parent_with_offset i o = let s = o-1 in parent (i-s) + s
 
-push_to_idx :: (?heap :: IndexedHeap s) => Int -> Int -> ST s ()
+push_to_idx :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 push_to_idx r i 
 	| i == r = return ()
 	| otherwise = let j = parent_with_offset i r in
 		      swap i j >> push_to_idx r j
 
-move_up :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
+move_up :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
 move_up Min i = let p = parent_with_offset i o in
 	        if (o > p) then return i
 	        else do cond <- cmp (<) i p 
@@ -242,37 +247,37 @@ heap_size = heap_size' ?ctx
 window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
 
-max_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+max_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 max_heapify = heapify Max heap_size
 
-min_heapify :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+min_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 min_heapify = heapify Min heap_size
 
-move_up_max :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_max :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_max = move_up Max 
 
-move_up_min :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_min :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_min = move_up Min
 
-take_median :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => ST s Double
-take_median = readArray (elems ?heap) idx_median
+take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s Double
+take_median = readArray (elems ?ind) idx_median
 
-push_to_max_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_max_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 push_to_max_root = push_to_idx idx_maxheap_root
 
-push_to_min_root :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_min_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 push_to_min_root = push_to_idx idx_minheap_root 
 
 -- Construction of the data structure
 
-init :: (?heap :: IndexedHeap s, ?ctx :: Ctx) => [Double] -> ST s ()
+init :: (?ind :: Indexed s, ?ctx :: Ctx) => [Double] -> ST s ()
 init l = heapsort window_size >> reverse idx_maxheap_root heap_size
 	where reverse i j 
 		| i < j = swap i j >> reverse (succ i) (pred j)
 		| otherwise = return ()
 
-build :: (?ctx :: Ctx) => [Double] -> ST s (IndexedHeap s)
-build l = liftM3 IndexedHeap heap idx_into_heap idx_into_window
+build :: (?ctx :: Ctx) => [Double] -> ST s (Indexed s)
+build l = liftM3 Indexed heap idx_into_heap idx_into_window
 	  where
              heap = newListArray (1, up_idx) l
 	     idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
