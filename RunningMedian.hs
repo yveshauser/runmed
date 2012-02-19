@@ -9,13 +9,11 @@ module RunningMedian (
         )
 where
 
-import Prelude hiding ( init, head )
-import Control.Applicative
+import Prelude hiding ( init )
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
-
 
 -- Note: Using implicit parameters language extension as motivated in
 --       Functional Pearls: Global Variables in Haskell, John Hughes 2004
