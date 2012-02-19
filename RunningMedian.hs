@@ -181,15 +181,8 @@ heapify_r Max s i m = let r = right i in
 		      if r > s then return m
 		      else idx_of (>) r m
 
-if_ :: Bool -> a -> a -> a
-if_ True x _  = x
-if_ False _ x = x
-
-ifF :: Monad m => m Bool -> m b -> m b -> m b
-ifF = liftM3 if_
-
 idx_of :: (?ind :: Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Int
-idx_of r i j = let cond = cmp r i j in ifF cond (return i) (return j)
+idx_of r i j = cmp r i j >>= \cond -> if cond then (return i) else (return j)
 
 cmp :: (?ind ::  Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
 cmp r i j = liftM2 r (read_elem i) (read_elem j) 
