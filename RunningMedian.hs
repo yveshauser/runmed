@@ -159,6 +159,12 @@ heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
 
 data Prio = Min | Max
 
+max_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
+max_heapify = heapify Max heap_size
+
+min_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
+min_heapify = heapify Min heap_size
+
 heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> ST s ()
 heapify p s i = do l <- heapify_l p s i 
                    m <- heapify_r p s i l 
@@ -191,11 +197,23 @@ idx_of r i j = cmp r i j >>= \cond -> if cond then (return i) else (return j)
 cmp :: (?ind ::  Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
 cmp r i j = liftM2 r (read_elem i) (read_elem j) 
 
+push_to_max_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_max_root = push_to_idx idx_maxheap_root
+
+push_to_min_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
+push_to_min_root = push_to_idx idx_minheap_root 
+
 push_to_idx :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 push_to_idx r i 
 	| i == r = return ()
 	| otherwise = let j = parent_with_offset i r in
 		      swap i j >> push_to_idx r j
+
+move_up_max :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_max = move_up Max 
+
+move_up_min :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
+move_up_min = move_up Min
 
 move_up :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
 move_up Min i = let p = parent_with_offset i o in
@@ -240,26 +258,8 @@ heap_size = heap_size' ?ctx
 window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
 
-max_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
-max_heapify = heapify Max heap_size
-
-min_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
-min_heapify = heapify Min heap_size
-
-move_up_max :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_max = move_up Max 
-
-move_up_min :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
-move_up_min = move_up Min
-
 take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s Double
 take_median = readArray (elems ?ind) idx_median
-
-push_to_max_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
-push_to_max_root = push_to_idx idx_maxheap_root
-
-push_to_min_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
-push_to_min_root = push_to_idx idx_minheap_root 
 
 -- Construction of the data structure
 
