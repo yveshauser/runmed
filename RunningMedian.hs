@@ -146,6 +146,10 @@ right i = succ $ shiftL i 1
 parent :: Int -> Int
 parent i = shiftR i 1
 
+{-# INLINE parent_with_offset #-}
+parent_with_offset :: Int -> Int -> Int
+parent_with_offset i o = let s = o-1 in parent (i-s) + s
+
 build_max_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s ()
 build_max_heap s = let up_idx = div s 2 in mapM_ (heapify Max s) $ reverse [1 .. up_idx]
 
@@ -186,9 +190,6 @@ idx_of r i j = cmp r i j >>= \cond -> if cond then (return i) else (return j)
 
 cmp :: (?ind ::  Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> ST s Bool
 cmp r i j = liftM2 r (read_elem i) (read_elem j) 
-
-parent_with_offset :: Int -> Int -> Int
-parent_with_offset i o = let s = o-1 in parent (i-s) + s
 
 push_to_idx :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 push_to_idx r i 
