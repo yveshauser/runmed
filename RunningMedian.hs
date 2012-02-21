@@ -32,14 +32,12 @@ runmed' xs
   | otherwise = let k = heap_size in begin_rule k xs ++ runmed'' xs ++ end_rule k xs
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
-runmed'' l = let s  = window_size
-                 l' = zip os xs
-                 xs = drop s l
-                 os = map (flip mod $ s) [0..] in
+runmed'' l = let xs = drop window_size l in 
               runST $ do h <- build l
                          let ?ind = h
                          init l
-                         liftM2 (:) take_median $ mapM (uncurry step) l'
+                         liftM2 (:) take_median $ imapM step xs
+	where imapM f l = mapM (uncurry f) (zip [0..] l)
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take
@@ -48,7 +46,7 @@ end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l
 
 step :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> ST s Double
-step o x_in = do i <- read_idx_into_elems (o+1)
+step o x_in = do i <- read_idx_into_elems $ (mod o window_size)+1
                  x_out <- read_elem i
                  med <- read_elem idx_median
                  write_elem i x_in
@@ -94,21 +92,27 @@ data Indexed s = Indexed {
           , idx_into_window :: STUArray s Int Int
         }
 
+{-# INLINE read_elem #-}
 read_elem :: (?ind :: Indexed s) => Int -> ST s Double
 read_elem = readArray (elems ?ind)
 
+{-# INLINE write_elem #-}
 write_elem :: (?ind :: Indexed s) => Int -> Double -> ST s ()
 write_elem = writeArray (elems ?ind)
 
+{-# INLINE read_idx_into_elems #-}
 read_idx_into_elems :: (?ind :: Indexed s) => Int -> ST s Int
 read_idx_into_elems = readArray (idx_into_elems ?ind)
 
+{-# INLINE write_idx_into_elems #-}
 write_idx_into_elems :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 write_idx_into_elems = writeArray (idx_into_elems ?ind)
 
+{-# INLINE read_idx_into_window #-}
 read_idx_into_window :: (?ind :: Indexed s) => Int -> ST s Int
 read_idx_into_window = readArray (idx_into_window ?ind)
 
+{-# INLINE write_idx_into_window #-}
 write_idx_into_window :: (?ind :: Indexed s) => Int -> Int -> ST s ()
 write_idx_into_window = writeArray (idx_into_window ?ind)
 
@@ -144,21 +148,27 @@ data Ctx = C { heap_size' :: {-# UNPACK #-} !Int
 buildCtx :: Int -> Ctx
 buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
 
+{-# INLINE idx_median #-}
 idx_median :: (?ctx :: Ctx) => Int
 idx_median = idx_median' ?ctx
 
+{-# INLINE idx_maxheap_root #-}
 idx_maxheap_root :: (?ctx :: Ctx) => Int
 idx_maxheap_root = idx_maxheap_root' ?ctx
 
+{-# INLINE idx_minheap_root #-}
 idx_minheap_root :: (?ctx :: Ctx) => Int
 idx_minheap_root = idx_minheap_root' ?ctx
 
+{-# INLINE heap_size #-}
 heap_size :: (?ctx :: Ctx) => Int
 heap_size = heap_size' ?ctx
 
+{-# INLINE window_size #-}
 window_size :: (?ctx :: Ctx) => Int
 window_size = window_size' ?ctx
 
+{-# INLINE take_median #-}
 take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s Double
 take_median = readArray (elems ?ind) idx_median
 
