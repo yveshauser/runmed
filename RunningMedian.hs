@@ -272,16 +272,16 @@ move_up_min :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> ST s Int
 move_up_min = move_up Min
 
 move_up :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> ST s Int
-move_up Min i = let p = parent_with_offset i o in
+move_up Min i = let o = idx_minheap_root 
+                    p = parent_with_offset i o in
                 if (o > p) then return i
                 else do cond <- cmp (<) i p
                         if cond then swap i p >> move_up Min p
                         else return i
-         where o = idx_minheap_root
 
-move_up Max i = let p = parent i in
+move_up Max i = let o = idx_maxheap_root 
+                    p = parent i in
                 if (o > p) then return i
                 else do cond <- cmp (>) i p
                         if cond then swap i p >> move_up Max p
                         else return i
-         where o = idx_maxheap_root
