@@ -32,12 +32,12 @@ runmed' xs
   | otherwise = let k = heap_size in begin_rule k xs ++ runmed'' xs ++ end_rule k xs
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
-runmed'' l = let xs = drop window_size l in 
-              runST $ do h <- build l
-                         let ?ind = h
-                         init l
-                         liftM2 (:) take_median $ imapM step xs
-	where imapM f l = mapM (uncurry f) (zip [0..] l)
+runmed'' l = runST $ do h <- build l
+                        let ?ind = h
+                        init l
+                        liftM2 (:) take_median $ imapM step xs
+    where imapM f l = mapM (uncurry f) (zip [0..] l)
+          xs = drop window_size l
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take
