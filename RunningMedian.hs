@@ -33,13 +33,13 @@ runmed' xs
 
 runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
 runmed'' l = let s  = window_size
-                 l' = zip xs os
+                 l' = zip os xs
                  xs = drop s l
                  os = map (flip mod $ s) [0..] in
               runST $ do h <- build l
                          let ?ind = h
                          init l
-                         liftM2 (:) take_median $ mapM (\(x,o) -> step x o) l'
+                         liftM2 (:) take_median $ mapM (uncurry step) l'
 
 begin_rule :: Int -> [Double] -> [Double]
 begin_rule = take
@@ -47,8 +47,8 @@ begin_rule = take
 end_rule :: Int -> [Double] -> [Double]
 end_rule k l = let n = (length l) - k in drop n l
 
-step :: (?ind :: Indexed s, ?ctx :: Ctx) => Double -> Int -> ST s Double
-step x_in o = do i <- read_idx_into_elems (o+1)
+step :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> ST s Double
+step o x_in = do i <- read_idx_into_elems (o+1)
                  x_out <- read_elem i
                  med <- read_elem idx_median
                  write_elem i x_in
