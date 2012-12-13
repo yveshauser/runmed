@@ -3,8 +3,7 @@
 -- | Implementation of a running median smoother according to the
 -- algorithm described in Haerdle und Steiger (1995).
 module RunningMedian (
-          Vector
-        , runmed
+          runmed
         , begin_rule
         , end_rule
         )
