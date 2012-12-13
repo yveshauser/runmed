@@ -3,7 +3,8 @@
 -- | Implementation of a running median smoother according to the
 -- algorithm described in Haerdle und Steiger (1995).
 module RunningMedian (
-          runmed
+          Vector
+        , runmed
         , begin_rule
         , end_rule
         )
@@ -15,6 +16,10 @@ import Control.Monad.ST
 import Data.Array.ST
 import Data.Bits
 
+import qualified Data.Vector.Unboxed as V
+
+type Vector = V.Vector Double
+
 -- Note: Using implicit parameters language extension as motivated in
 --       Functional Pearls: Global Variables in Haskell, John Hughes 2004
 
@@ -22,28 +27,30 @@ import Data.Bits
 --
 --   The algorithm is running in optimal time, see referenced paper.
 runmed :: Int       -- ^ The size @k@, where @2*k+1@ is the window size
-       -> [Double]  -- ^ The input list @xs@
-       -> [Double]  -- ^ The output list @ys@
+       -> Vector    -- ^ The input vector @xs@
+       -> Vector    -- ^ The output vector @ys@
 runmed k xs = let ?ctx = buildCtx k in runmed' xs
 
-runmed' :: (?ctx :: Ctx) => [Double] -> [Double]
+runmed' :: (?ctx :: Ctx) => Vector -> Vector
 runmed' xs
-  | length xs < window_size = xs
-  | otherwise = let k = heap_size in begin_rule k xs ++ runmed'' xs ++ end_rule k xs
+   | V.length xs < window_size = xs
+   | otherwise = let k = heap_size in begin_rule k xs `cat` runmed'' xs `cat` end_rule k xs
+	where cat = (V.++)
 
-runmed'' :: (?ctx :: Ctx) => [Double] -> [Double]
-runmed'' l = runST $ do h <- build l
-                        let ?ind = h
-                        init l
-                        liftM2 (:) take_median $ imapM step xs
-    where imapM f l = mapM (uncurry f) (zip [0..] l)
-          xs = drop window_size l
+runmed'' :: (?ctx :: Ctx) => Vector -> Vector
+runmed'' l = runST $ do i <- buildInd l
+                        let ?ind = i
+                        init
+                        liftM2 V.cons take_median $ imapM step xs
+    where xs = V.drop window_size l
+          imapM :: Monad m => (Int -> Double -> m Double) -> Vector -> m Vector
+          imapM f v = let n = V.length v in V.mapM (uncurry f) $ V.zip (V.fromList [0..n-1]) v
 
-begin_rule :: Int -> [Double] -> [Double]
-begin_rule = take
+begin_rule :: Int -> Vector -> Vector
+begin_rule = V.take
 
-end_rule :: Int -> [Double] -> [Double]
-end_rule k l = let n = (length l) - k in drop n l
+end_rule :: Int -> Vector -> Vector
+end_rule k l = let n = (V.length l) - k in V.drop n l
 
 step :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> ST s Double
 step o x_in = do i <- read_idx_into_elems $ (mod o window_size)+1
@@ -174,19 +181,18 @@ take_median = readArray (elems ?ind) idx_median
 
 -- Construction of the data structure
 
-init :: (?ind :: Indexed s, ?ctx :: Ctx) => [Double] -> ST s ()
-init l = heapsort window_size >> reverse idx_maxheap_root heap_size
+init :: (?ind :: Indexed s, ?ctx :: Ctx) => ST s ()
+init = heapsort window_size >> reverse idx_maxheap_root heap_size
         where reverse i j
                 | i < j = swap i j >> reverse (succ i) (pred j)
                 | otherwise = return ()
 
-build :: (?ctx :: Ctx) => [Double] -> ST s (Indexed s)
-build l = liftM3 Indexed heap idx_into_heap idx_into_window
-          where
-             heap = newListArray (1, up_idx) l
-             idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
-             idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
-             up_idx = window_size
+buildInd :: (?ctx :: Ctx) => Vector -> ST s (Indexed s)
+buildInd l = liftM3 Indexed heap idx_into_heap idx_into_window
+    where heap = newListArray (1, up_idx) $ V.toList l
+          idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
+          idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
+          up_idx = window_size
 
 -- Heap operations
 
