@@ -1,4 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeFamilies #-}
+-- {-# LANGUAGE DatatypeContexts #-}
+-- {-# LANGUAGE ConstraintKinds #-}
 
 -- | Implementation of a running median smoother according to the
 -- algorithm described in Haerdle und Steiger (1995).
@@ -11,13 +14,14 @@ where
 
 import Prelude hiding ( init )
 import Control.Monad
-import Control.Monad.ST
-import Data.Array.ST
 import Data.Array.IO
 import Data.Bits
+
 import System.IO.Unsafe
 
 import qualified Data.Vector.Unboxed as V
+
+import GHC.Exts (Constraint)
 
 type Vector = V.Vector Double
 
@@ -30,21 +34,20 @@ type Vector = V.Vector Double
 runmed :: Int       -- ^ The size @k@, where @2*k+1@ is the window size
        -> Vector    -- ^ The input vector @xs@
        -> Vector    -- ^ The output vector @ys@
-runmed k xs = let ?ctx = buildCtx k in runmed' xs
+runmed k xs = let ctx = buildCtx k in runmed' ctx xs
 
-runmed' :: (?ctx :: Ctx) => Vector -> Vector
-runmed' xs
-   | V.length xs < window_size = xs
-   | otherwise = let k = heap_size in begin_rule k xs `cat` runmed'' xs `cat` end_rule k xs
+runmed' :: Ctx -> Vector -> Vector
+runmed' ctx xs
+   | V.length xs < (window_size ctx) = xs
+   | otherwise = let k = (heap_size ctx) in begin_rule k xs `cat` runmed'' ctx xs `cat` end_rule k xs
   where cat = (V.++)
 
-runmed'' :: (?ctx :: Ctx) => Vector -> Vector
-runmed'' l = unsafePerformIO $
-                     do i <- buildInd l
-                        let ?ind = i
-                        init
-                        liftM2 V.cons take_median $ imapM step xs
-    where xs = V.drop window_size l
+runmed'' :: Ctx -> Vector -> Vector
+runmed'' ctx l = unsafePerformIO $ 
+  do moving_window <- buildInd ctx l
+     order moving_window ctx
+     liftM2 V.cons (readArray (elems moving_window) (idx_median ctx)) $ imapM (step moving_window ctx) xs
+    where xs = V.drop (window_size ctx) l
           imapM :: Monad m => (Int -> Double -> m Double) -> Vector -> m Vector
           imapM f v = let n = V.length v in V.mapM (uncurry f) $ V.zip (V.fromList [0..n-1]) v
 
@@ -54,16 +57,20 @@ begin_rule = V.take
 end_rule :: Int -> Vector -> Vector
 end_rule k l = let n = (V.length l) - k in V.drop n l
 
-step :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> IO Double
-step o x_in = do i <- read_idx_into_elems $ (mod o window_size)+1
-                 x_out <- read_elem i
-                 med <- read_elem idx_median
-                 write_elem i x_in
-                 rebuild_heap i x_out x_in med
-                 take_median
+step :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> Double -> m Double
+step ind ctx o x_in =
+              do i <- readArray (idx_into_elems ind) $ (mod o (window_size ctx))+1
+                 x_out <- readArray (elems ind) i
+                 med <- readArray (elems ind) (idx_median ctx)
+                 writeArray (elems ind) i x_in
+                 rebuild_heap ind ctx i x_out x_in med
+                 readArray (elems ind) (idx_median ctx)
 
-rebuild_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> Double -> Double -> Double -> IO ()
-rebuild_heap i x_out x_in med
+
+-- TODO: typeclass with min_out_min_in etc.?
+
+rebuild_heap :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> Double -> Double -> Double -> m ()
+rebuild_heap ind ctx i x_out x_in med
         -- min out
         | x_out > med && x_in >= med = min_out_min_in i
         | x_out > med && x_in <  med = min_out_max_in i
@@ -75,126 +82,79 @@ rebuild_heap i x_out x_in med
         | x_out == med && x_in <  med = med_out_max_in i
         | x_out == med && x_in == med = med_out_med_in i
   where
-        max_out_max_in i = move_up_max i >>= max_heapify
-        min_out_min_in i = move_up_min i >>= min_heapify
-        max_out_min_in i = push_to_max_root i >> swap idx_maxheap_root idx_median >>
-                           do min_root <- read_elem idx_minheap_root
-                              if min_root < x_in then swap idx_median idx_minheap_root >> min_heapify idx_minheap_root
+        max_out_max_in i = move_up_max ind ctx i >>= max_heapify ind ctx
+        min_out_min_in i = move_up_min ind ctx i >>= min_heapify ind ctx
+        max_out_min_in i = push_to_max_root ind ctx i >> swap ind (idx_maxheap_root ctx) (idx_median ctx) >>
+                           do min_root <- readArray (elems ind) (idx_minheap_root ctx)
+                              if min_root < x_in then swap ind (idx_median ctx) (idx_minheap_root ctx) >> min_heapify ind ctx (idx_minheap_root ctx)
                               else return ()
-        min_out_max_in i = push_to_min_root i >> swap idx_minheap_root idx_median >>
-                           do max_root <- read_elem idx_maxheap_root
-                              if max_root > x_in then swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
+        min_out_max_in i = push_to_min_root ind ctx i >> swap ind (idx_minheap_root ctx) (idx_median ctx) >>
+                           do max_root <- readArray (elems ind) (idx_maxheap_root ctx)
+                              if max_root > x_in then swap ind (idx_median ctx) (idx_maxheap_root ctx) >> max_heapify ind ctx (idx_maxheap_root ctx)
                               else return ()
-        med_out_min_in i = do min_root <- read_elem idx_minheap_root
-                              if min_root < x_in then swap i idx_median >> swap idx_median idx_minheap_root >> min_heapify idx_minheap_root
+        med_out_min_in i = do min_root <- readArray (elems ind) (idx_minheap_root ctx)
+                              if min_root < x_in then swap ind i (idx_median ctx) >> swap ind (idx_median ctx) (idx_minheap_root ctx) >> min_heapify ind ctx (idx_minheap_root ctx)
                               else return ()
-        med_out_max_in i = do max_root <- read_elem idx_maxheap_root
-                              if max_root > x_in then swap i idx_median >> swap idx_median idx_maxheap_root >> max_heapify idx_maxheap_root
+        med_out_max_in i = do max_root <- readArray (elems ind) (idx_maxheap_root ctx)
+                              if max_root > x_in then swap ind i (idx_median ctx) >> swap ind (idx_median ctx) (idx_maxheap_root ctx) >> max_heapify ind ctx (idx_maxheap_root ctx)
                               else return ()
         med_out_med_in _ = return ()
 
 -- Data structure
-
-data Indexed s = Indexed {
-            elems :: IOUArray Int Double
-          , idx_into_elems :: IOUArray Int Int
-          , idx_into_window :: IOUArray Int Int
+data Indexed3 a = Indexed3 {
+            elems :: a Int Double
+          , idx_into_elems :: a Int Int
+          , idx_into_window :: a Int Int
         }
 
-{-# INLINE read_elem #-}
-read_elem :: (?ind :: Indexed s) => Int -> IO Double
-read_elem = readArray (elems ?ind)
-
-{-# INLINE write_elem #-}
-write_elem :: (?ind :: Indexed s) => Int -> Double -> IO ()
-write_elem = writeArray (elems ?ind)
-
-{-# INLINE read_idx_into_elems #-}
-read_idx_into_elems :: (?ind :: Indexed s) => Int -> IO Int
-read_idx_into_elems = readArray (idx_into_elems ?ind)
-
-{-# INLINE write_idx_into_elems #-}
-write_idx_into_elems :: (?ind :: Indexed s) => Int -> Int -> IO ()
-write_idx_into_elems = writeArray (idx_into_elems ?ind)
-
-{-# INLINE read_idx_into_window #-}
-read_idx_into_window :: (?ind :: Indexed s) => Int -> IO Int
-read_idx_into_window = readArray (idx_into_window ?ind)
-
-{-# INLINE write_idx_into_window #-}
-write_idx_into_window :: (?ind :: Indexed s) => Int -> Int -> IO ()
-write_idx_into_window = writeArray (idx_into_window ?ind)
 
 -- | swap two elements
-swap :: (?ind :: Indexed s) => Int -> Int -> IO ()
-swap i j = do -- read values
-              heap_elem_i <- read_elem i
-              heap_elem_j <- read_elem j
-              win_elem_i <- read_idx_into_window i
-              win_elem_j <- read_idx_into_window j
-              pos_elem_k <- read_idx_into_elems win_elem_i
-              pos_elem_l <- read_idx_into_elems win_elem_j
+swap :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Int -> Int -> m ()
+swap ind i j = do -- read values
+              heap_elem_i <- readArray (elems ind) i
+              heap_elem_j <- readArray (elems ind) j
+              win_elem_i <- readArray (idx_into_window ind) i
+              win_elem_j <- readArray (idx_into_window ind) j
+              pos_elem_k <- readArray (idx_into_elems ind) win_elem_i
+              pos_elem_l <- readArray (idx_into_elems ind) win_elem_j
               -- update heap
-              write_elem j heap_elem_i
-              write_elem i heap_elem_j
+              writeArray (elems ind) j heap_elem_i
+              writeArray (elems ind) i heap_elem_j
               -- update position index
-              write_idx_into_elems win_elem_i pos_elem_l
-              write_idx_into_elems win_elem_j pos_elem_k
+              writeArray (idx_into_elems ind) win_elem_i pos_elem_l
+              writeArray (idx_into_elems ind) win_elem_j pos_elem_k
               -- update window index
-              write_idx_into_window j win_elem_i
-              write_idx_into_window i win_elem_j
+              writeArray (idx_into_window ind) j win_elem_i
+              writeArray (idx_into_window ind) i win_elem_j
 
 -- Having a context as implicit parameter, in order to statically
 -- get the window size and dependent parameters
 
-data Ctx = C { heap_size' :: {-# UNPACK #-} !Int
-             , idx_median' :: {-# UNPACK #-} !Int
-             , idx_maxheap_root' :: {-# UNPACK #-} !Int
-             , idx_minheap_root' :: {-# UNPACK #-} !Int
-             , window_size' :: {-# UNPACK #-} !Int
+data Ctx = C { heap_size :: {-# UNPACK #-} !Int
+             , idx_median :: {-# UNPACK #-} !Int
+             , idx_maxheap_root :: {-# UNPACK #-} !Int
+             , idx_minheap_root :: {-# UNPACK #-} !Int
+             , window_size :: {-# UNPACK #-} !Int
             }
 
 buildCtx :: Int -> Ctx
 buildCtx k = C k (k+1) 1 (k+2) (2*k+1)
 
-{-# INLINE idx_median #-}
-idx_median :: (?ctx :: Ctx) => Int
-idx_median = idx_median' ?ctx
-
-{-# INLINE idx_maxheap_root #-}
-idx_maxheap_root :: (?ctx :: Ctx) => Int
-idx_maxheap_root = idx_maxheap_root' ?ctx
-
-{-# INLINE idx_minheap_root #-}
-idx_minheap_root :: (?ctx :: Ctx) => Int
-idx_minheap_root = idx_minheap_root' ?ctx
-
-{-# INLINE heap_size #-}
-heap_size :: (?ctx :: Ctx) => Int
-heap_size = heap_size' ?ctx
-
-{-# INLINE window_size #-}
-window_size :: (?ctx :: Ctx) => Int
-window_size = window_size' ?ctx
-
-{-# INLINE take_median #-}
-take_median :: (?ind :: Indexed s, ?ctx :: Ctx) => IO Double
-take_median = readArray (elems ?ind) idx_median
-
 -- Construction of the data structure
 
-init :: (?ind :: Indexed s, ?ctx :: Ctx) => IO ()
-init = heapsort window_size >> reverse idx_maxheap_root heap_size
+order  :: (MArray a Double m, MArray a Int m) => Indexed3 a -> Ctx -> m ()
+order ind ctx = heapsort ind ctx (window_size ctx) >> reverse (idx_maxheap_root ctx) (heap_size ctx)
         where reverse i j
-                | i < j = swap i j >> reverse (succ i) (pred j)
+                | i < j = swap ind i j >> reverse (succ i) (pred j)
                 | otherwise = return ()
+              k = heap_size ctx
 
-buildInd :: (?ctx :: Ctx) => Vector -> IO (Indexed s)
-buildInd l = liftM3 Indexed heap idx_into_heap idx_into_window
+buildInd :: Ctx -> Vector -> IO (Indexed3 IOUArray)
+buildInd ctx l = liftM3 Indexed3 heap idx_into_heap idx_into_window
     where heap = newListArray (1, up_idx) $ V.toList l
-          idx_into_heap = newListArray (1, up_idx) [1 .. up_idx]
-          idx_into_window = newListArray (1, up_idx) [1 .. up_idx]
-          up_idx = window_size
+          idx_into_heap = newListArray (1, up_idx) [1 .. (up_idx)]
+          idx_into_window = newListArray (1, up_idx) [1 .. (up_idx)]
+          up_idx = (window_size ctx)
 
 -- Heap operations
 
@@ -214,82 +174,92 @@ parent i = shiftR i 1
 parent_with_offset :: Int -> Int -> Int
 parent_with_offset i o = let s = o-1 in parent (i-s) + s
 
-build_max_heap :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-build_max_heap s = let up_idx = div s 2 in mapM_ (heapify Max s) $ reverse [1 .. up_idx]
+build_max_heap :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+build_max_heap ind ctx s = let up_idx = div s 2 in mapM_ (heapify ind ctx Max s) $ reverse [1 .. up_idx]
 
-heapsort :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-heapsort 1 = return ()
-heapsort n = build_max_heap n >> swap 1 n >> heapsort (n-1)
+heapsort :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+heapsort ind ctx 1 = return ()
+heapsort ind ctx n = build_max_heap ind ctx n >> swap ind 1 n >> heapsort ind ctx (n-1)
 
 data Prio = Min | Max
 
-max_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-max_heapify = heapify Max heap_size
+max_heapify :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+max_heapify ind ctx = heapify ind ctx Max (heap_size ctx)
 
-min_heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-min_heapify = heapify Min heap_size
+min_heapify :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+min_heapify ind ctx = heapify ind ctx Min (heap_size ctx)
 
-heapify :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> IO ()
-heapify p s i = do l <- heapify_l p s i
-                   m <- heapify_r p s i l
+heapify :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Prio -> Int -> Int -> m ()
+heapify ind ctx p s i = 
+                do l <- heapify_l (elems ind) ctx p s i
+                   m <- heapify_r (elems ind) ctx p s i l
                    if m == i then return ()
-                   else swap i m >> heapify p s m
+                   else swap ind i m >> heapify ind ctx p s m
 
-heapify_l :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> IO Int
-heapify_l Min s i = if l > s then return i
-                    else idx_of (<) (l+o) i
-                where l = left (i-o)
-                      o = idx_minheap_root-1
+heapify_l :: (Ord e, MArray a e m) =>
+  a Int e -> Ctx -> Prio -> Int -> Int -> m Int
 
-heapify_l Max s i = let l = left i in
+heapify_l arr ctx Min s i = 
                     if l > s then return i
-                    else idx_of (>) l i
+                    else idx_of arr (<) (l+o) i
+                where l = left (i-o)
+                      o = (idx_minheap_root ctx)-1
 
-heapify_r :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> Int -> Int -> IO Int
-heapify_r Min s i m = if r > s then return m
-                      else idx_of (<) (r+o) m
-                where r = right (i-o)
-                      o = idx_minheap_root-1
+heapify_l arr ctx Max s i = 
+                    let l = left i in
+                    if l > s then return i
+                    else idx_of arr (>) l i
 
-heapify_r Max s i m = let r = right i in
+heapify_r :: (Ord e, MArray a e m) =>
+  a Int e -> Ctx -> Prio -> Int -> Int -> Int -> m Int
+heapify_r arr ctx Min s i m = 
                       if r > s then return m
-                      else idx_of (>) r m
+                      else idx_of arr (<) (r+o) m
+                where r = right (i-o)
+                      o = (idx_minheap_root ctx)-1
 
-idx_of :: (?ind :: Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> IO Int
-idx_of r i j = cmp r i j >>= \cond -> if cond then (return i) else (return j)
+heapify_r arr ctx Max s i m = 
+                      let r = right i in
+                      if r > s then return m
+                      else idx_of arr (>) r m
 
-cmp :: (?ind ::  Indexed s) => (Double -> Double -> Bool) -> Int -> Int -> IO Bool
-cmp r i j = liftM2 r (read_elem i) (read_elem j)
+idx_of :: (Ix i, MArray a e m) =>
+  a i e -> (e -> e -> Bool) -> i -> i -> m i
+idx_of arr r i j = cmp arr r i j >>= \cond -> if cond then (return i) else (return j)
 
-push_to_max_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-push_to_max_root = push_to_idx idx_maxheap_root
+cmp :: (Ix i, MArray a e m) =>
+  a i e -> (e -> e -> r) -> i -> i -> m r
+cmp arr r i j = liftM2 r (readArray arr i) (readArray arr j)
 
-push_to_min_root :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO ()
-push_to_min_root = push_to_idx idx_minheap_root
+push_to_max_root :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+push_to_max_root ind c = push_to_idx ind (idx_maxheap_root c)
 
-push_to_idx :: (?ind :: Indexed s) => Int -> Int -> IO ()
-push_to_idx r i
+push_to_min_root :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m ()
+push_to_min_root ind c = push_to_idx ind (idx_minheap_root c)
+
+push_to_idx :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Int -> Int -> m ()
+push_to_idx idx r i
         | i == r = return ()
         | otherwise = let j = parent_with_offset i r in
-                      swap i j >> push_to_idx r j
+                      swap idx i j >> push_to_idx idx r j
 
-move_up_max :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO Int
-move_up_max = move_up Max
+move_up_max :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m Int
+move_up_max i c = move_up i c Max
 
-move_up_min :: (?ind :: Indexed s, ?ctx :: Ctx) => Int -> IO Int
-move_up_min = move_up Min
+move_up_min :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Int -> m Int
+move_up_min i c = move_up i c Min
 
-move_up :: (?ind :: Indexed s, ?ctx :: Ctx) => Prio -> Int -> IO Int
-move_up Min i = let o = idx_minheap_root 
-                    p = parent_with_offset i o in
-                if (o > p) then return i
-                else do cond <- cmp (<) i p
-                        if cond then swap i p >> move_up Min p
-                        else return i
+move_up :: (MArray a Int m, MArray a Double m) => Indexed3 a -> Ctx -> Prio -> Int -> m Int
+move_up idx c Min i = let o = idx_minheap_root c
+                          p = parent_with_offset i o in
+                      if (o > p) then return i
+                      else do cond <- cmp (elems idx) (<) i p
+                              if cond then swap idx i p >> move_up idx c Min p
+                              else return i
 
-move_up Max i = let o = idx_maxheap_root 
-                    p = parent i in
-                if (o > p) then return i
-                else do cond <- cmp (>) i p
-                        if cond then swap i p >> move_up Max p
-                        else return i
+move_up idx c Max i = let o = idx_maxheap_root c
+                          p = parent i in
+                      if (o > p) then return i
+                      else do cond <- cmp (elems idx) (>) i p
+                              if cond then swap idx i p >> move_up idx c Max p
+                              else return i
