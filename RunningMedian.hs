@@ -45,28 +45,28 @@ update_and_median win x_in = (update_heap x_in >=> acc_and_median) win
     update_heap :: Double -> Arrays s -> Stack s (Arrays s)
     update_heap x_in win@(heap, i1, i2, o) =
       do i     <- peek_index win (o+1)
-         x_out <- peek_elem win i
          med   <- peek_median win
+         idx   <- asks idx_median
          update_elem win i x_in
-         rebuild_heap win i x_out x_in med
+         rebuild_heap win i idx x_in med
     acc_and_median :: Arrays s -> Stack s (Arrays s, Double)
     acc_and_median win@(heap, i1, i2, o) =
       do med  <- peek_median win
          size <- asks window_size
          return ((heap, i1, i2, mod (o+1) size), med)
 
-rebuild_heap :: Arrays s -> Int -> Double -> Double -> Double -> Stack s (Arrays s)
-rebuild_heap win i x_out x_in med
+rebuild_heap :: Arrays s -> Int -> Int -> Double -> Double -> Stack s (Arrays s)
+rebuild_heap win i idx x_in med
   -- minheap out
-  | x_out >  med && x_in >  med = min_out_min_in i win
-  | x_out >= med && x_in <= med = min_out_max_in i win
+  | i >  idx && x_in >  med = min_out_min_in i win
+  | i >  idx && x_in <= med = min_out_max_in i win
   -- maxheap out
-  | x_out <  med && x_in <  med = max_out_max_in i win
-  | x_out <= med && x_in >= med = max_out_min_in i win
+  | i <  idx && x_in <  med = max_out_max_in i win
+  | i <  idx && x_in >= med = max_out_min_in i win
   -- median out
-  | x_out == med && x_in >  med = med_out_min_in i win
-  | x_out == med && x_in <  med = med_out_max_in i win
-  | x_out == med && x_in == med = med_out_med_in i win
+  | i == idx && x_in >  med = med_out_min_in i win
+  | i == idx && x_in <  med = med_out_max_in i win
+  | i == idx && x_in == med = med_out_med_in i win
   where
     min_out_min_in i = move_up_min i >=> uncurry min_heapify
     min_out_max_in i = push_to_min_root i >=> swap_minroot_median >=> \win' -> do
