@@ -4,29 +4,28 @@ import RunningMedian
 import Test.QuickCheck
 import Math.Statistics
 
-import qualified Data.Vector.Unboxed as V
+import Data.List
+import Data.Ord (comparing)
 
-type Vector = V.Vector Double
+runmed_naive :: Int -> [Double] -> [Double]
+runmed_naive k l
+  | length l < 2*k+1 = l
+  | otherwise = begin_rule k l ++ moving_median k l ++ end_rule k l
+  where
+    begin_rule = take
+    end_rule k l = let n = length l - k in drop n l
 
-instance Arbitrary (V.Vector Double) where
-    arbitrary = fmap V.fromList arbitrary
-
-runmed_naive :: Int -> Vector -> Vector
-runmed_naive k l 
-  | V.length l < 2*k+1 = l
-  | otherwise = begin_rule k l `cat` moving_median k l `cat` end_rule k l
-	where cat = (V.++)
-
-moving_median :: Int -> Vector -> Vector
-moving_median k v = V.fromList $ moving_median' k (V.toList v)
-
-moving_median' _ [] = []
-moving_median' k l@(x:xs) 
+moving_median _ [] = []
+moving_median k l@(x:xs)
   | length l < 2*k+1 = []
-  | otherwise = let window = take (2*k+1) l in 
-                median window : moving_median' k xs
+  | otherwise = let window = take (2*k+1) l in
+                median window : moving_median k xs
 
-k = 3
+prop_length k xs = k >= 3 && odd k ==> length (runmed k xs) == length xs
+qc0 = quickCheck prop_length
 
-prop_median_model xs = runmed k xs == runmed_naive k xs
-qc1 = quickCheck (prop_median_model :: Vector -> Bool)
+prop_median_model xs = let k = 3 in runmed k xs == runmed_naive k xs
+qc1 = quickCheck (prop_median_model :: [Double] -> Bool)
+
+prop_median_model_fixed k xs = k >= 3 && odd k ==> runmed k xs == runmed_naive k xs
+qc2 = quickCheck prop_median_model_fixed
