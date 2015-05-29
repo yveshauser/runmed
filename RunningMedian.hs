@@ -34,8 +34,8 @@ runmed' k xs = runST $ build_window env xs >>= run
 runmed'' :: Arrays s -> [Double] -> Stack s [Double]
 runmed'' h xs = do
   heap <- order h
-  y <- peek_median heap
-  ys <- mapAccumLM (flip update_and_median) heap xs
+  y    <- peek_median heap
+  ys   <- mapAccumLM (flip update_and_median) heap xs
   return (y:snd ys)
 
 update_and_median :: Double -> Arrays s -> Stack s (Arrays s, Double)
