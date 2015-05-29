@@ -43,12 +43,13 @@ swap ind@(heap, i1, i2, _) i j = do
    write_array i2 i l
    return ind
 
-data Env = Env { heap_size :: Int
-               , idx_median :: Int
-               , idx_maxheap_root :: Int
-               , idx_minheap_root :: Int
-               , window_size :: Int
-               }
+data Env = Env {
+    heap_size :: Int
+  , idx_median :: Int
+  , idx_maxheap_root :: Int
+  , idx_minheap_root :: Int
+  , window_size :: Int
+}
 
 build_environment :: Int -> Env
 build_environment k = Env k (k+1) 1 (k+2) (2*k+1)
@@ -69,13 +70,13 @@ swap_median_maxroot = swap_maxroot_median
 swap_median_minroot = swap_minroot_median
 swap_median_index = swap_index_median
 
-peek_index (_, i1, _, _) i = read_array i1 i
-peek_elem (heap, _, _, _) i = read_array heap i
+peek_index (_, i1, _, _) = read_array i1
+peek_elem (heap, _, _, _) = read_array heap
 peek_median (heap, _, _, _) = asks idx_median >>= read_array heap
 peek_minroot (heap, _, _, _) = asks idx_minheap_root >>= read_array heap
 peek_maxroot (heap, _, _, _) = asks idx_maxheap_root >>= read_array heap
 
-update_elem (heap, _, _, _) i x = write_array heap i x
+update_elem (heap, _, _, _) = write_array heap
 
 move_up_max :: Int -> Arrays s -> Stack s (Arrays s, Int)
 move_up_max i ind = asks idx_maxheap_root >>= \r -> move_up ind Max r i
@@ -152,10 +153,10 @@ heapify_r (heap, _, _, _) ix Min s i m = do
 
 heapify_r (heap, _, _, _) ix Max s i m = let r = right i in if r > s then return m else idx_of heap (>) r m
 
-idx_of :: (Array s Double) -> (Double -> Double -> Bool) -> Int -> Int -> Stack s Int
+idx_of :: Array s Double -> (Double -> Double -> Bool) -> Int -> Int -> Stack s Int
 idx_of arr r i j = cmp arr r i j >>= \cond -> if cond then (return i) else (return j)
 
-cmp :: (Array s Double) -> (Double -> Double -> Bool) -> Int -> Int -> Stack s Bool
+cmp :: Array s Double -> (Double -> Double -> Bool) -> Int -> Int -> Stack s Bool
 cmp arr r i j = lift $ liftM2 r (readArray arr i) (readArray arr j)
 
 push_to_idx ind r i
@@ -165,14 +166,14 @@ push_to_idx ind r i
 move_up :: Arrays s -> Prio -> Int -> Int -> Stack s (Arrays s, Int)
 move_up ind@(heap, _, _, _) Min ix i = do
   let p = parent_with_offset i ix
-  if (ix > p) then return (ind, i)
+  if ix > p then return (ind, i)
   else do cond <- cmp heap (<) i p
           if cond then swap ind i p >>= \i -> move_up i Min ix p
           else return (ind, i)
 
 move_up ind@(heap, _, _, _) Max ix i = do
   let p = parent i
-  if (ix > p) then return (ind, i)
+  if ix > p then return (ind, i)
   else do cond <- cmp heap (>) i p
           if cond then swap ind i p >>= \i -> move_up i Max ix p
           else return (ind, i)
