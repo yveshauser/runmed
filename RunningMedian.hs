@@ -7,8 +7,8 @@ where
 import Control.Monad.Reader (asks, runReaderT)
 import Control.Monad.ST (runST)
 import Control.Monad ((>=>))
-import Internal.RunningMedian
-import Internal.MonadUtils (mapAccumLM)
+import RunningMedian.Internal
+import RunningMedian.MonadUtils (mapAccumLM)
 
 -- | Running median filter, i.e., @y_i = median (x_i-k, ..., x_i+k)@, for @k < i < l-k@,
 --   where @l = length xs@. The first and the last @k@ elements are given by the 'begin_rule' and 'end_rule'
@@ -83,11 +83,11 @@ rebuild_heap i med_idx x_in med
     med_out_min_in i win = do
       minroot <- peek_minroot win
       if minroot < x_in
-        then (swap_index_median i >=> swap_median_minroot >=> min_heapify_full) win
+        then (swap_median_minroot >=> min_heapify_full) win
         else return win
     med_out_max_in i win = do
       maxroot <- peek_maxroot win
       if maxroot > x_in
-        then (swap_index_median i >=> swap_median_maxroot >=> max_heapify_full) win
+        then (swap_median_maxroot >=> max_heapify_full) win
         else return win
     med_out_med_in _ = return

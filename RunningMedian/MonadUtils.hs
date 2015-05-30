@@ -1,4 +1,4 @@
-module Internal.MonadUtils (
+module RunningMedian.MonadUtils (
     mapAccumLM
   )
 where

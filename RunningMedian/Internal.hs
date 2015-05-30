@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Internal.RunningMedian
+module RunningMedian.Internal
 where
 
 import Prelude hiding ( init )
