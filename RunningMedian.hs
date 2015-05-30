@@ -10,7 +10,8 @@ import Control.Monad ((>=>))
 import Internal.RunningMedian
 import Internal.MonadUtils (mapAccumLM)
 
--- | Running median filter, i.e., @y_i = median (x_i-k, ..., x_i+k)@, for @k < i < l-k@, where @l = length xs@. The first and the last @k@ elements are given by the 'begin_rule' and 'end_rule'
+-- | Running median filter, i.e., @y_i = median (x_i-k, ..., x_i+k)@, for @k < i < l-k@,
+--   where @l = length xs@. The first and the last @k@ elements are given by the 'begin_rule' and 'end_rule'
 --
 --   The algorithm is running in optimal time, see referenced paper.
 runmed :: Int       -- ^ The size @k@, where @2*k+1@ is the window size
