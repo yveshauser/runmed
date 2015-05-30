@@ -9,7 +9,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.ST
 import Control.Monad.ST.Class
-import Data.Array.IO
 import Data.Array.ST
 import Data.Bits
 import Data.Traversable
@@ -84,21 +83,21 @@ move_up_max i ind = asks idx_maxheap_root >>= \r -> move_up ind Max r i
 move_up_min :: Int -> Arrays s -> Stack s (Arrays s, Int)
 move_up_min i ind = asks idx_minheap_root >>= \r -> move_up ind Min r i
 
-max_heapify :: Arrays s -> Int -> Stack s (Arrays s)
-max_heapify ind i = do s <- asks heap_size
-                       r <- asks idx_maxheap_root
-                       heapify ind r Max s i
+max_heapify :: (Arrays s, Int) -> Stack s (Arrays s)
+max_heapify (ind, i) = do s <- asks heap_size
+                          r <- asks idx_maxheap_root
+                          heapify ind r Max s i
 
-min_heapify :: Arrays s -> Int -> Stack s (Arrays s)
-min_heapify ind i = do s <- asks heap_size
-                       r <- asks idx_minheap_root
-                       heapify ind r Min s i
+min_heapify :: (Arrays s, Int) -> Stack s (Arrays s)
+min_heapify (ind, i) = do s <- asks heap_size
+                          r <- asks idx_minheap_root
+                          heapify ind r Min s i
 
 max_heapify_full :: Arrays s -> Stack s (Arrays s)
-max_heapify_full ind = asks idx_maxheap_root >>= max_heapify ind
+max_heapify_full ind = asks idx_maxheap_root >>= (curry max_heapify) ind
 
 min_heapify_full :: Arrays s -> Stack s (Arrays s)
-min_heapify_full ind = asks idx_minheap_root >>= min_heapify ind
+min_heapify_full ind = asks idx_minheap_root >>= (curry min_heapify) ind
 
 push_to_max_root i ind = asks idx_maxheap_root >>= \ix -> push_to_idx ind ix i
 push_to_min_root i ind = asks idx_minheap_root >>= \ix -> push_to_idx ind ix i

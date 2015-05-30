@@ -68,13 +68,13 @@ rebuild_heap i med_idx x_in med
   | i == med_idx && x_in <  med = med_out_max_in i
   | i == med_idx && x_in == med = med_out_med_in i
   where
-    min_out_min_in i = move_up_min i >=> uncurry min_heapify
+    min_out_min_in i = move_up_min i >=> min_heapify
     min_out_max_in i = push_to_min_root i >=> swap_minroot_median >=> \win' -> do
       maxroot <- peek_maxroot win'
       if maxroot > x_in
         then (swap_median_maxroot >=> max_heapify_full) win'
         else return win'
-    max_out_max_in i = move_up_max i >=> uncurry max_heapify
+    max_out_max_in i = move_up_max i >=> max_heapify
     max_out_min_in i = push_to_max_root i >=> swap_maxroot_median >=> \win' -> do
       minroot <- peek_minroot win'
       if minroot < x_in
